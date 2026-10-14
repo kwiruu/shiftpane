@@ -1,0 +1,9 @@
+{
+  "recommendations": [
+    "biomejs.biome",
+    "typescriptteam.native-preview",
+    "rust-lang.rust-analyzer",
+    "bradlc.vscode-tailwindcss",
+    "vitest.explorer"
+  ]
+}

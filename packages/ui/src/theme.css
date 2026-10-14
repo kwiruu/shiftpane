@@ -1,0 +1,58 @@
+/*
+ * ShiftPane design tokens (Tailwind v4, CSS-first).
+ * Import after tailwindcss:  @import "tailwindcss"; @import "@shiftpane/ui/theme.css";
+ * Dark is the default: the phone sits next to a monitor, often in a dim room.
+ */
+
+@theme {
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+
+  --color-surface: oklch(0.17 0.01 260);
+  --color-surface-raised: oklch(0.22 0.012 260);
+  --color-surface-sunken: oklch(0.13 0.008 260);
+  --color-border: oklch(0.32 0.012 260);
+  --color-ink: oklch(0.96 0.005 260);
+  --color-ink-muted: oklch(0.72 0.01 260);
+  --color-accent: oklch(0.78 0.16 195);
+  --color-accent-ink: oklch(0.2 0.03 195);
+  --color-ok: oklch(0.8 0.17 150);
+  --color-warn: oklch(0.83 0.16 80);
+  --color-danger: oklch(0.68 0.2 25);
+
+  --radius-panel: 1.25rem;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --color-surface: oklch(0.98 0.003 260);
+    --color-surface-raised: oklch(1 0 0);
+    --color-surface-sunken: oklch(0.94 0.005 260);
+    --color-border: oklch(0.86 0.008 260);
+    --color-ink: oklch(0.2 0.01 260);
+    --color-ink-muted: oklch(0.45 0.012 260);
+    --color-accent: oklch(0.55 0.14 200);
+    --color-accent-ink: oklch(0.98 0.01 200);
+  }
+}
+
+:root[data-theme="light"] {
+  --color-surface: oklch(0.98 0.003 260);
+  --color-surface-raised: oklch(1 0 0);
+  --color-surface-sunken: oklch(0.94 0.005 260);
+  --color-border: oklch(0.86 0.008 260);
+  --color-ink: oklch(0.2 0.01 260);
+  --color-ink-muted: oklch(0.45 0.012 260);
+  --color-accent: oklch(0.55 0.14 200);
+  --color-accent-ink: oklch(0.98 0.01 200);
+}
+
+@layer base {
+  html {
+    color-scheme: dark light;
+    background: var(--color-surface);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+}

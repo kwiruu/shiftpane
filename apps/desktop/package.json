@@ -1,0 +1,40 @@
+{
+  "name": "@shiftpane/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ShiftPane desktop app: pairing, HTTPS/WebSocket server, display capture, widget collectors",
+  "author": "ShiftPane contributors",
+  "homepage": "https://github.com/kwiruu/shiftpane",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
+    "test": "vitest run --passWithNoTests",
+    "package": "electron-builder --publish never",
+    "package:dir": "electron-builder --dir --publish never"
+  },
+  "devDependencies": {
+    "@shiftpane/helper-client": "workspace:*",
+    "@shiftpane/layout": "workspace:*",
+    "@shiftpane/protocol": "workspace:*",
+    "@shiftpane/ui": "workspace:*",
+    "@shiftpane/widget-sdk": "workspace:*",
+    "@tailwindcss/vite": "catalog:",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "babel-plugin-react-compiler": "catalog:",
+    "electron": "^44.7.1",
+    "electron-builder": "^26.17.0",
+    "electron-vite": "^5.0.0",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}

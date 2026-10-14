@@ -1,0 +1,14 @@
+[package]
+name = "shiftpane-linux"
+description = "Linux backend: compositor-specific virtual outputs (Mutter, KWin, wlroots, X11)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+shiftpane-core.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,22 @@
+{
+  "name": "@shiftpane/protocol",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Every message between the PC and the phone, as zod schemas shared by both sides",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "fast-check": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

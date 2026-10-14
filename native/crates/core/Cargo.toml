@@ -1,0 +1,18 @@
+[package]
+name = "shiftpane-core"
+description = "Wire protocol, backend trait and request loop shared by every ShiftPane native helper"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+ts-rs.workspace = true
+
+[lints]
+workspace = true

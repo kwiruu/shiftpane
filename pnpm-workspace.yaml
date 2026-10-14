@@ -1,0 +1,37 @@
+packages:
+  - apps/*
+  - packages/*
+  - native
+
+# One version of each shared dependency across the repo. Reference with "catalog:".
+catalog:
+  # tooling
+  '@biomejs/biome': 2.5.15
+  turbo: ^2.11.8
+  typescript: ^7.0.2
+  vitest: ^5.0.4
+  fast-check: ^4.10.2
+  '@playwright/test': ^1.64.0
+  '@types/node': ^24.19.2
+  # build
+  # Vite 7 until electron-vite 6 (Vite 8 support) leaves beta.
+  vite: ^7.3.7
+  '@vitejs/plugin-react': ^5.2.0
+  babel-plugin-react-compiler: ^1.0.0
+  '@tailwindcss/vite': ^4.3.3
+  tailwindcss: ^4.3.3
+  # runtime
+  react: ^19.3.0
+  react-dom: ^19.3.0
+  '@types/react': ^19.3.0
+  '@types/react-dom': ^19.3.0
+  zod: ^4.6.7
+
+onlyBuiltDependencies:
+  - electron
+  - esbuild
+
+ignoredBuiltDependencies:
+  - electron-winstaller
+
+# Electron binaries are large; CI jobs that only lint and test set ELECTRON_SKIP_BINARY_DOWNLOAD=1.

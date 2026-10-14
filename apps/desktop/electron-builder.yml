@@ -1,0 +1,54 @@
+# Installers for all three platforms. Build the phone app and the native helper first:
+#   pnpm package   (runs turbo: phone build + cargo build --release + this)
+appId: dev.shiftpane.app
+productName: ShiftPane
+executableName: shiftpane
+# The workspace package is @shiftpane/desktop; installers and the deb package use a plain name.
+extraMetadata:
+  name: shiftpane
+copyright: Copyright © 2026 ShiftPane contributors
+directories:
+  output: release/${version}
+  buildResources: build
+files:
+  - out/**
+  - package.json
+# All runtime code is bundled into out/ by electron-vite, so no node_modules are packed.
+extraResources:
+  - from: ../phone/dist
+    to: phone
+    filter: ['**/*']
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+
+win:
+  target: [nsis]
+  extraResources:
+    - from: ../../target/release/shiftpane-helper.exe
+      to: bin/shiftpane-helper.exe
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+
+mac:
+  target: [dmg]
+  category: public.app-category.productivity
+  hardenedRuntime: true
+  extendInfo:
+    NSScreenCaptureUsageDescription: ShiftPane streams the virtual monitor to your phone.
+  extraResources:
+    - from: ../../target/release/shiftpane-helper
+      to: bin/shiftpane-helper
+
+linux:
+  target: [AppImage, deb]
+  category: Utility
+  maintainer: ShiftPane contributors
+  extraResources:
+    - from: ../../target/release/shiftpane-helper
+      to: bin/shiftpane-helper
+
+publish:
+  provider: github
+  owner: kwiruu
+  repo: shiftpane

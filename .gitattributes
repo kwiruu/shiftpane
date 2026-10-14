@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.{ps1,bat,cmd} text eol=crlf
+*.{png,jpg,jpeg,gif,ico,icns,webp,woff2} binary
+**/bindings/*.ts linguist-generated=true
+pnpm-lock.yaml linguist-generated=true -diff
+Cargo.lock linguist-generated=true -diff

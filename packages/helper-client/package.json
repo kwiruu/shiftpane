@@ -1,0 +1,19 @@
+{
+  "name": "@shiftpane/helper-client",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Typed client the desktop app uses to spawn and talk to shiftpane-helper",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

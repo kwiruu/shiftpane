@@ -1,0 +1,42 @@
+[workspace]
+resolver = "3"
+members = ["native/crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+repository = "https://github.com/kwiruu/shiftpane"
+
+[workspace.dependencies]
+shiftpane-core = { path = "native/crates/core" }
+shiftpane-windows = { path = "native/crates/windows" }
+shiftpane-macos = { path = "native/crates/macos" }
+shiftpane-linux = { path = "native/crates/linux" }
+
+anyhow = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
+ts-rs = { version = "12", features = ["serde-json-impl", "no-serde-warnings"] }
+
+[workspace.lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+missing_errors_doc = "allow"
+must_use_candidate = "allow"
+unwrap_used = "warn"
+dbg_macro = "warn"
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+panic = "abort"

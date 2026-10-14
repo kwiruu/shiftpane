@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  installers:
+    name: Installer (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build installers (NSIS on Windows, DMG on macOS, AppImage and deb on Linux)
+        run: pnpm package
+        env:
+          # Unsigned until signing certificates are configured as repository secrets.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - uses: actions/upload-artifact@v7
+        with:
+          name: installers-${{ runner.os }}
+          path: |
+            apps/desktop/release/*/*.exe
+            apps/desktop/release/*/*.dmg
+            apps/desktop/release/*/*.AppImage
+            apps/desktop/release/*/*.deb
+          if-no-files-found: error
+
+  publish:
+    name: GitHub Release
+    needs: installers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: installers
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: installers/**/*
+          generate_release_notes: true
+          draft: true

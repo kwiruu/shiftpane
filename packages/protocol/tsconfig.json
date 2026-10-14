@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // Runs in Electron's main process and in phone browsers; only uses web-standard globals.
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["src"]
+}

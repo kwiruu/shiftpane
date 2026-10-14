@@ -1,0 +1,29 @@
+{
+  "name": "shiftpane",
+  "private": true,
+  "description": "Turn any phone or tablet into a second monitor sized exactly to the device, with a live widget panel beside it.",
+  "license": "MIT",
+  "repository": "github:kwiruu/shiftpane",
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "dev": "turbo run dev",
+    "dev:desktop": "turbo run dev --filter=@shiftpane/desktop",
+    "dev:phone": "turbo run dev --filter=@shiftpane/phone",
+    "build": "turbo run build",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "check": "pnpm lint && turbo run typecheck test",
+    "package": "turbo run package --filter=@shiftpane/desktop"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:"
+  }
+}

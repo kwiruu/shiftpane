@@ -1,0 +1,12 @@
+{
+  "name": "@shiftpane/native",
+  "private": true,
+  "description": "Turborepo entry point for the Rust workspace (Cargo.toml at the repo root).",
+  "scripts": {
+    "build": "cargo build --release --locked -p shiftpane-helper",
+    "typecheck": "cargo check --workspace --all-targets --locked",
+    "lint": "cargo fmt --all --check && cargo clippy --workspace --all-targets --locked -- -D warnings",
+    "test": "cargo test --workspace --locked",
+    "bindings": "cargo test --locked -p shiftpane-core export_bindings"
+  }
+}

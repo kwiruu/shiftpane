@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  TURBO_TELEMETRY_DISABLED: 1
+
+jobs:
+  typescript:
+    name: TypeScript (lint, typecheck, test, build)
+    runs-on: ubuntu-latest
+    env:
+      # This job never launches Electron.
+      ELECTRON_SKIP_BINARY_DOWNLOAD: 1
+    steps:
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm turbo run typecheck test build --filter='!@shiftpane/native'
+
+  rust:
+    name: Rust (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - if: runner.os == 'Linux'
+        run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - run: cargo test --workspace --locked
+      - name: TypeScript bindings match the Rust protocol
+        if: runner.os == 'Linux'
+        run: git diff --exit-code -- packages/helper-client/src/bindings
+      - name: Helper starts and answers the handshake
+        shell: bash
+        run: |
+          reply=$(echo '{"id":1,"method":"helper.hello"}' | cargo run --quiet --locked -p shiftpane-helper)
+          echo "$reply"
+          echo "$reply" | grep -q '"protocolVersion":1'
+
+  package:
+    name: Package desktop app (${{ matrix.os }})
+    needs: [typescript, rust]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v7
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Build phone app, native helper and an unpacked desktop app
+        run: pnpm turbo run package --filter=@shiftpane/desktop -- --dir
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false

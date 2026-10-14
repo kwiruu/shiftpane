@@ -1,0 +1,17 @@
+[package]
+name = "shiftpane-macos"
+description = "macOS backend: CGVirtualDisplay, no driver required"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+shiftpane-core.workspace = true
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+
+[lints]
+workspace = true
