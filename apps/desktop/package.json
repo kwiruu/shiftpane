@@ -23,18 +23,23 @@
     "@shiftpane/widget-sdk": "workspace:*",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
+    "@types/ws": "^8.18.2",
     "@vitejs/plugin-react": "catalog:",
     "babel-plugin-react-compiler": "catalog:",
     "electron": "^44.7.1",
     "electron-builder": "^26.17.0",
     "electron-vite": "^5.0.0",
+    "qrcode": "^1.5.4",
     "react": "catalog:",
     "react-dom": "catalog:",
+    "selfsigned": "^5.5.0",
     "tailwindcss": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "ws": "^8.22.0"
   }
 }

@@ -75,9 +75,14 @@ Requirements: Node 22.12+, pnpm 10 (`corepack enable`), Rust stable (picked up f
 
 ```sh
 pnpm install
-pnpm dev:phone      # phone PWA dev server on http://localhost:5173 (no pairing yet)
-pnpm dev:desktop    # Electron app with hot reload
+pnpm --filter @shiftpane/phone build   # the desktop app serves this build to phones
+pnpm dev:desktop                        # Electron app; shows the pairing QR code
 ```
+
+Scan the QR code with a phone on the same Wi-Fi. The phone warns about the self-signed certificate once; accept
+it and the phone shows "Connected to <your PC>". If the PC has several network adapters (VPN, WSL, VirtualBox),
+pick the one your phone is on from the Network menu under the QR code. `pnpm dev:phone` runs the phone UI alone
+with hot reload, without pairing.
 
 | Command | What it does |
 | --- | --- |

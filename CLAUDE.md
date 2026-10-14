@@ -33,6 +33,10 @@ TypeScript, a Cargo workspace for the native helper. See README.md for the layou
 
 - Vite is pinned to 7 because electron-vite 5 does not support Vite 8.
 - TypeScript 7 is the native compiler: there is no `tsserver.js`, so editor tooling uses the TS native preview.
+- Bundling `ws` into the Electron main process needs `WS_NO_BUFFER_UTIL`/`WS_NO_UTF_8_VALIDATE` defined (see
+  `apps/desktop/electron.vite.config.ts`); without them every WebSocket frame over 32 bytes silently kills the
+  connection. Unit tests run unbundled `ws` and will not catch this, so test pairing against the built app.
+- The desktop app serves the phone app from `apps/phone/dist` in dev; rebuild the phone app to see phone changes there.
 - Set `ELECTRON_SKIP_BINARY_DOWNLOAD=1` for installs that never launch Electron (CI lint jobs do).
 - Cloud sessions behind the agent proxy need `NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt` for Electron and
   electron-builder downloads; `.claude/hooks/session-start.sh` sets it.

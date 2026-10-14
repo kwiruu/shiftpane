@@ -1,9 +1,11 @@
 import { computeSplit, type Rect, SPLIT_PRESETS, type SplitPreset } from '@shiftpane/layout'
-import { parsePairingHash } from '@shiftpane/protocol'
 import { useState } from 'react'
+import { describeConnection, usePcConnection } from './usePcConnection.ts'
 import { useViewport } from './useViewport.ts'
 
 const placeAt = ({ x, y, width, height }: Rect) => ({ left: x, top: y, width, height })
+
+const TONE_DOT = { ok: 'bg-ok', wait: 'bg-warn animate-pulse', bad: 'bg-danger' } as const
 
 const PRESET_LABELS: Record<SplitPreset, string> = {
   monitor: 'Monitor',
@@ -13,13 +15,13 @@ const PRESET_LABELS: Record<SplitPreset, string> = {
 }
 
 /**
- * Placeholder shell: shows whether a pairing token arrived and what monitor the current
- * split would ask the PC for. The stream player and widget panel replace the two panes.
+ * Placeholder shell: shows the connection to the PC and what monitor the current split
+ * would ask it for. The stream player and widget panel replace the two panes.
  */
 export function App() {
   const viewport = useViewport()
   const [preset, setPreset] = useState<SplitPreset>('70-30')
-  const paired = parsePairingHash(window.location.hash) !== null
+  const status = describeConnection(usePcConnection())
   const layout = computeSplit({
     viewport,
     devicePixelRatio: viewport.devicePixelRatio,
@@ -49,11 +51,12 @@ export function App() {
         className="absolute flex flex-col gap-4 overflow-y-auto p-4"
       >
         <header>
-          <h1 className="font-semibold text-lg">ShiftPane</h1>
-          <p className="text-ink-muted text-sm">
-            {paired
-              ? 'Pairing token received. Connecting…'
-              : 'Scan the QR code in the ShiftPane desktop app to pair.'}
+          <h1 className="flex items-center gap-2 font-semibold text-lg">
+            <span className={`size-2 rounded-full ${TONE_DOT[status.tone]}`} aria-hidden />
+            {status.title}
+          </h1>
+          <p className="text-ink-muted text-sm" role="status">
+            {status.detail}
           </p>
         </header>
         <fieldset className="flex flex-wrap gap-2">

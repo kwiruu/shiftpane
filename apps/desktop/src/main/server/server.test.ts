@@ -1,0 +1,116 @@
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { request } from 'node:https'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { CloseCode, generatePairingToken, type PcMessage } from '@shiftpane/protocol'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { WebSocket } from 'ws'
+import { createCertificate } from './certificate.ts'
+import { PhoneHub } from './phone-hub.ts'
+import { type LanServer, startLanServer } from './server.ts'
+
+const token = generatePairingToken()
+let server: LanServer
+let ca: string
+let hub: PhoneHub
+
+beforeAll(async () => {
+  const root = await mkdtemp(join(tmpdir(), 'shiftpane-www-'))
+  await mkdir(join(root, 'assets'))
+  await writeFile(join(root, 'index.html'), '<!doctype html><title>phone</title>')
+  await writeFile(join(root, 'assets', 'app-1.js'), 'console.log(1)')
+  const tls = await createCertificate(['127.0.0.1'])
+  ca = tls.cert
+  hub = new PhoneHub({
+    token: () => token,
+    pc: { name: 'test', platform: 'linux' },
+    features: () => ({ display: false, remoteControl: false }),
+  })
+  server = await startLanServer({ tls, staticRoot: root, hub, port: 0, host: '127.0.0.1' })
+})
+
+afterAll(() => server.close())
+
+function get(path: string) {
+  return new Promise<{ status: number; headers: Record<string, unknown>; body: string }>(
+    (resolve, reject) => {
+      const req = request({ host: '127.0.0.1', port: server.port, path, ca }, (res) => {
+        let body = ''
+        res.on('data', (chunk) => {
+          body += chunk
+        })
+        res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body }))
+      })
+      req.on('error', reject)
+      req.end()
+    },
+  )
+}
+
+function connect(headers: Record<string, string> = { origin: `https://127.0.0.1:${server.port}` }) {
+  return new WebSocket(`wss://127.0.0.1:${server.port}/ws`, { ca, headers })
+}
+
+const nextMessage = (ws: WebSocket) =>
+  new Promise<PcMessage>((resolve) =>
+    ws.once('message', (data) => resolve(JSON.parse(data.toString()))),
+  )
+const closed = (ws: WebSocket) =>
+  new Promise<number>((resolve) => ws.once('close', (code) => resolve(code)))
+
+const hello = (pairingToken: string) =>
+  JSON.stringify({
+    type: 'hello',
+    protocol: 1,
+    token: pairingToken,
+    device: {
+      name: 'test phone',
+      viewport: { width: 400, height: 800 },
+      devicePixelRatio: 2,
+      touch: true,
+    },
+  })
+
+describe('LAN server', () => {
+  it('serves the phone app over HTTPS with security headers', async () => {
+    const page = await get('/')
+    expect(page.status).toBe(200)
+    expect(page.body).toContain('<title>phone</title>')
+    expect(page.headers['content-security-policy']).toContain("default-src 'self'")
+    expect(page.headers['cache-control']).toBe('no-cache')
+    expect((await get('/assets/app-1.js')).headers['cache-control']).toContain('immutable')
+    expect((await get('/../../etc/passwd')).status).toBe(404)
+  })
+
+  it('pairs a phone that presents the token', async () => {
+    const ws = connect()
+    await new Promise((resolve) => ws.once('open', resolve))
+    ws.send(hello(token))
+    expect(await nextMessage(ws)).toMatchObject({ type: 'welcome', pc: { platform: 'linux' } })
+    expect(hub.phones.map((p) => p.name)).toContain('test phone')
+    ws.send(JSON.stringify({ type: 'ping', at: 7 }))
+    expect(await nextMessage(ws)).toEqual({ type: 'pong', at: 7 })
+    const done = closed(ws)
+    ws.close()
+    await done
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(hub.phones).toEqual([])
+  })
+
+  it('closes a socket with the wrong token', async () => {
+    const ws = connect()
+    await new Promise((resolve) => ws.once('open', resolve))
+    ws.send(hello(generatePairingToken()))
+    expect(await closed(ws)).toBe(CloseCode.unauthorized)
+  })
+
+  it('refuses upgrades from another origin or path', async () => {
+    const foreign = connect({ origin: 'https://evil.example' })
+    const error = await new Promise<Error>((resolve) => foreign.once('error', resolve))
+    expect(error.message).toMatch(/403/)
+    const wrongPath = new WebSocket(`wss://127.0.0.1:${server.port}/other`, { ca })
+    expect(
+      (await new Promise<Error>((resolve) => wrongPath.once('error', resolve))).message,
+    ).toMatch(/403/)
+  })
+})
