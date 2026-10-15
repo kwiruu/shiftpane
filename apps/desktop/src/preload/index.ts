@@ -1,4 +1,5 @@
 import { contextBridge, type IpcRendererEvent, ipcRenderer } from 'electron'
+import type { CaptureEvent } from '../shared/capture.ts'
 import type { DisplayState } from '../shared/display.ts'
 import type { FirewallAllowResult, FirewallState } from '../shared/firewall.ts'
 import { IpcChannel, type PairingState } from '../shared/pairing.ts'
@@ -48,6 +49,14 @@ const api: ShiftPaneApi = {
       return () => ipcRenderer.off(IpcChannel.displayChanged, handler)
     },
     retry: () => ipcRenderer.invoke(IpcChannel.displayRetry) as Promise<void>,
+  },
+  capture: {
+    onCommand: (listener) => {
+      const handler = (_event: IpcRendererEvent, command: unknown) => listener(command)
+      ipcRenderer.on(IpcChannel.captureCommand, handler)
+      return () => ipcRenderer.off(IpcChannel.captureCommand, handler)
+    },
+    send: (event: CaptureEvent) => ipcRenderer.send(IpcChannel.captureEvent, event),
   },
 }
 

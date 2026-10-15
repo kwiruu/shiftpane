@@ -1,3 +1,4 @@
+import type { CaptureEvent } from '../shared/capture.ts'
 import type { DisplayState } from '../shared/display.ts'
 import type { FirewallAllowResult, FirewallState, SettingsPage } from '../shared/firewall.ts'
 import type { PairingState } from '../shared/pairing.ts'
@@ -32,6 +33,15 @@ export interface ShiftPaneApi {
     onChange(listener: (state: DisplayState) => void): () => void
     /** Repeats what failed last (re-checks the driver, asks Windows for approval again). */
     retry(): Promise<void>
+  }
+  /**
+   * The capture page's end of the stream to the phone. The main process picks the display and
+   * relays the signaling; the page only ever gets commands for the one virtual monitor.
+   */
+  capture: {
+    /** Calls `listener` for every command; the payload is unvalidated, parse it. */
+    onCommand(listener: (command: unknown) => void): () => void
+    send(event: CaptureEvent): void
   }
 }
 

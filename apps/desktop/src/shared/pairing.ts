@@ -46,4 +46,6 @@ export const IpcChannel = {
   displayGet: 'display:get',
   displayChanged: 'display:changed',
   displayRetry: 'display:retry',
+  captureCommand: 'capture:command',
+  captureEvent: 'capture:event',
 } as const

@@ -1,6 +1,14 @@
 import { realpathSync } from 'node:fs'
 import { join } from 'node:path'
-import { app, BrowserWindow, type IpcMainInvokeEvent, ipcMain, session, shell } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  type IpcMainEvent,
+  type IpcMainInvokeEvent,
+  ipcMain,
+  session,
+  shell,
+} from 'electron'
 import { z } from 'zod'
 import {
   type FirewallAllowResult,
@@ -17,6 +25,7 @@ import {
 import { FirewallMonitor } from './firewall/monitor.ts'
 import { allowThroughFirewall, queryFirewall } from './firewall/powershell.ts'
 import { PairingService } from './pairing.ts'
+import { type StreamingService, startStreaming } from './stream/service.ts'
 
 const isDev = !app.isPackaged && process.env.ELECTRON_RENDERER_URL !== undefined
 const platform =
@@ -30,6 +39,7 @@ let mainWindow: BrowserWindow | null = null
 let pairing: PairingService | null = null
 let firewall: FirewallMonitor | null = null
 let display: DisplayController | null = null
+let streaming: StreamingService | null = null
 
 const UNKNOWN_FIREWALL: FirewallState = { status: 'unknown' }
 const SettingsPageSchema = z.enum(SETTINGS_PAGES)
@@ -75,6 +85,9 @@ function createWindow(): BrowserWindow {
       nodeIntegration: false,
       webSecurity: true,
       spellcheck: false,
+      // This page also captures and encodes the monitor for the phone; minimized or covered, it
+      // must keep running at full speed.
+      backgroundThrottling: false,
     },
   })
 
@@ -112,16 +125,17 @@ function createWindow(): BrowserWindow {
 }
 
 function hardenSession(): void {
-  // No camera, mic, notifications or geolocation for the local UI. Screen capture is
-  // requested from the main process, not the renderer.
-  session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) =>
-    callback(false),
+  // No camera, mic, notifications or geolocation for the local UI. The one exception is the
+  // window asking for the virtual monitor's screen while the main process has armed exactly
+  // that source for it (see stream/service.ts); the main process also picks the source.
+  session.defaultSession.setPermissionRequestHandler((webContents, permission, callback, details) =>
+    callback(streaming?.allowsCapture(webContents, permission, details) ?? false),
   )
   session.defaultSession.setPermissionCheckHandler(() => false)
 }
 
 /** IPC is only accepted from our own window's top frame. */
-function fromMainWindow(event: IpcMainInvokeEvent): boolean {
+function fromMainWindow(event: IpcMainInvokeEvent | IpcMainEvent): boolean {
   return (
     mainWindow !== null &&
     event.sender === mainWindow.webContents &&
@@ -202,6 +216,7 @@ app.on('before-quit', (event) => {
   stopping = true
   event.preventDefault()
   // Phones first, so nothing asks for a monitor while it is being removed.
+  streaming?.stop()
   void pairing
     .stop()
     .then(() => display?.stop())
@@ -226,6 +241,13 @@ app.whenReady().then(() => {
     displayAvailable: () => controller.available,
   })
   bindDisplayToHub(controller, pairing.hub)
+  streaming = startStreaming({
+    display: controller,
+    hub: pairing.hub,
+    session: session.defaultSession,
+    getWindow: () => mainWindow,
+    fromWindow: fromMainWindow,
+  })
   registerIpc(pairing)
   registerDisplayIpc(controller)
   firewall = createFirewallMonitor()
