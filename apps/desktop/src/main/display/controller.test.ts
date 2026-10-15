@@ -1,11 +1,17 @@
 import type { DisplayInfo, HelloInfo, HelperError } from '@shiftpane/helper-client'
 import { HelperCallError } from '@shiftpane/helper-client'
-import { computeSplit, SPLIT_PRESETS, type SplitPreset } from '@shiftpane/layout'
+import {
+  computeSplit,
+  MONITOR_SIZES,
+  pickMonitorSize,
+  SPLIT_PRESETS,
+  type SplitPreset,
+} from '@shiftpane/layout'
 import { describe, expect, it, vi } from 'vitest'
 import type { DisplayState, MonitorSize } from '../../shared/display.ts'
 import { DisplayController, type DisplayControllerOptions, type PairedPhone } from './controller.ts'
 import type { HelperChannel } from './helper-host.ts'
-import { sizesForPhone } from './sizes.ts'
+import { catalogueSizes } from './sizes.ts'
 
 interface Recorded {
   method: string
@@ -51,9 +57,13 @@ const scaled: NonNullable<DisplayControllerOptions['sizesFor']> = (viewport, dev
 
 type Responder = (call: Recorded) => unknown | Promise<unknown>
 
+/** The controller tests below drive exact sizes, so by default the monitor size is not snapped. */
+const exactly: NonNullable<DisplayControllerOptions['pickSize']> = (size) => size
+
 function setup(
   responder: Responder = () => undefined,
   sizesFor: NonNullable<DisplayControllerOptions['sizesFor']> = () => SIZES,
+  pickSize: NonNullable<DisplayControllerOptions['pickSize']> = exactly,
 ) {
   const calls: Recorded[] = []
   const exitListeners: Array<() => void> = []
@@ -111,7 +121,7 @@ function setup(
     },
   }
 
-  const controller = new DisplayController({ host, sizesFor, stopGraceMs: 50 })
+  const controller = new DisplayController({ host, sizesFor, pickSize, stopGraceMs: 50 })
   const states: DisplayState[] = []
   controller.on('change', (state) => states.push(state))
   const events: string[] = []
@@ -656,7 +666,7 @@ describe('DisplayController: a viewport that changed after pairing', () => {
   })
 })
 
-describe('DisplayController: the prompt budget on a real phone', () => {
+describe('DisplayController: the fixed size catalogue', () => {
   /**
    * A driver that keeps a list of sizes: adding any is one UAC prompt, whether `display.prepare`
    * or `display.attach` does it.
@@ -681,72 +691,74 @@ describe('DisplayController: the prompt budget on a real phone', () => {
       }
       return undefined
     }
-    return { responder, prompts: () => prompts }
+    return { responder, prompts: () => prompts, listed }
   }
 
   const DPR = 2.625
   type Viewport = { width: number; height: number }
 
   function phoneOn(driver: ReturnType<typeof fakeDriver>, paired: Viewport) {
-    const { controller } = setup(driver.responder, sizesForPhone)
-    controller.phoneJoined({ id: 'a', viewport: paired, devicePixelRatio: DPR })
-    const split = (viewport: Viewport, preset: SplitPreset) => {
+    // The real defaults: the catalogue is prepared, and sizes are snapped to it.
+    const harness = setup(driver.responder, () => catalogueSizes(), pickMonitorSize)
+    harness.controller.phoneJoined({ id: 'a', viewport: paired, devicePixelRatio: DPR })
+    /** What the phone does after a split or rotation: request, and wait for the monitor. */
+    const choose = async (viewport: Viewport, preset: SplitPreset) => {
       const { stream } = computeSplit({
         viewport,
         devicePixelRatio: DPR,
         monitorFraction: SPLIT_PRESETS[preset],
       })
       if (!stream) throw new Error('the preset has no monitor')
-      return stream
-    }
-    /** What the phone does after a split or rotation: request, and wait for the monitor. */
-    const choose = async (viewport: Viewport, preset: SplitPreset) => {
-      const size = split(viewport, preset)
-      controller.streamRequested('a', size, { viewport, devicePixelRatio: DPR })
+      const size = pickMonitorSize(stream)
+      harness.controller.streamRequested('a', stream, { viewport, devicePixelRatio: DPR })
       await vi.waitFor(() =>
-        expect(controller.state).toEqual({ status: 'attached', phoneId: 'a', size }),
+        expect(harness.controller.state).toEqual({ status: 'attached', phoneId: 'a', size }),
       )
+      return size
     }
-    return { choose, split }
+    return { ...harness, choose }
   }
 
-  it('costs one prompt at pairing and one more after the first rotation, not one per preset', async () => {
+  it('asks for one prompt at pairing and none for any split or rotation after it', async () => {
     const driver = fakeDriver()
     const portrait = { width: 412, height: 800 }
-    // What Chrome reports once the phone is sideways: the toolbar leaves 892x412, not the
-    // 800x412 that turning the paired viewport would give.
+    // What Chrome reports once the phone is sideways: the toolbar leaves 892x412, not 800x412.
     const landscape = { width: 892, height: 412 }
-    const { choose, split } = phoneOn(driver, portrait)
-
-    // The premise: the swapped guess does not contain the landscape size, so it needs a prompt.
-    expect(sizesForPhone(portrait, DPR)).not.toContainEqual(split(landscape, '70-30'))
+    const { choose } = phoneOn(driver, portrait)
 
     await choose(portrait, '70-30')
+    expect(driver.prompts()).toBe(1)
     await choose(portrait, '50-50')
     await choose(portrait, 'monitor')
-    expect(driver.prompts()).toBe(1)
-
     await choose(landscape, '70-30')
-    expect(driver.prompts()).toBe(2)
     await choose(landscape, '50-50')
     await choose(landscape, 'monitor')
-    expect(driver.prompts()).toBe(2)
-
-    // Rotating back and forth afterwards is free: both viewports are in the driver already.
     await choose(portrait, '70-30')
-    await choose(landscape, '50-50')
-    await choose(portrait, 'monitor')
-    expect(driver.prompts()).toBe(2)
+    expect(driver.prompts()).toBe(1)
   })
 
-  it('costs nothing extra when the rotated viewport is exactly the swapped one', async () => {
+  it('prepares the whole catalogue, and only the catalogue, whichever phone pairs', async () => {
     const driver = fakeDriver()
-    const { choose } = phoneOn(driver, { width: 768, height: 1024 })
+    const { prepares } = phoneOn(driver, { width: 360, height: 780 })
+    await vi.waitFor(() => expect(prepares().length).toBeGreaterThan(0))
+    const keys = new Set(MONITOR_SIZES.map((s) => `${s.width}x${s.height}`))
+    expect(new Set(prepares()[0])).toEqual(keys)
+  })
 
-    await choose({ width: 768, height: 1024 }, '70-30')
-    await choose({ width: 1024, height: 768 }, '70-30')
-    await choose({ width: 1024, height: 768 }, 'monitor')
-    expect(driver.prompts()).toBe(1)
+  it('only ever puts the monitor at a catalogue size', async () => {
+    const driver = fakeDriver()
+    const { choose, attaches } = phoneOn(driver, { width: 390, height: 844 })
+    for (const viewport of [
+      { width: 390, height: 844 },
+      { width: 844, height: 390 },
+      { width: 1024, height: 768 },
+    ]) {
+      for (const preset of ['monitor', '70-30', '50-50'] as const) await choose(viewport, preset)
+    }
+    const keys = new Set(MONITOR_SIZES.map((s) => `${s.width}x${s.height}`))
+    for (const size of attaches()) expect(keys.has(size), size).toBe(true)
+    // Nothing outside the catalogue was ever listed with the driver either.
+    for (const size of driver.listed) expect(keys.has(size), size).toBe(true)
   })
 })
 

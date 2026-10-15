@@ -1,9 +1,10 @@
 import { EventEmitter } from 'node:events'
 import type { DisplayInfo, DisplaySize } from '@shiftpane/helper-client'
+import { pickMonitorSize } from '@shiftpane/layout'
 import type { DisplayState, MonitorSize } from '../../shared/display.ts'
 import type { HelperSession } from './helper-host.ts'
 import { describeProblem, type Problem } from './problems.ts'
-import { sizesForPhone } from './sizes.ts'
+import { catalogueSizes } from './sizes.ts'
 
 /** What the controller needs from {@link HelperHost}. */
 export interface DisplayHost {
@@ -27,8 +28,16 @@ export interface DisplayControllerOptions {
   host: DisplayHost
   /** Refresh rate asked for; the driver picks the closest it offers. */
   refreshHz?: number
-  /** Every size a phone can need, prepared in one go when it pairs or its viewport changes. */
+  /**
+   * Every size to have the driver list, prepared in one go when a phone pairs. By default the
+   * fixed catalogue, the same for every phone.
+   */
   sizesFor?: (viewport: PhoneScreen['viewport'], devicePixelRatio: number) => DisplaySize[]
+  /**
+   * The size to put the monitor at for the size a phone's split asks for. By default the nearest
+   * catalogue size, which the phone letterboxes.
+   */
+  pickSize?: (wanted: MonitorSize) => MonitorSize
   /** How long `stop` waits for in-flight work before closing the helper anyway. */
   stopGraceMs?: number
   log?: (message: string) => void
@@ -79,6 +88,7 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
   readonly #host: DisplayHost
   readonly #refreshHz: number
   readonly #sizesFor: NonNullable<DisplayControllerOptions['sizesFor']>
+  readonly #pickSize: NonNullable<DisplayControllerOptions['pickSize']>
   readonly #stopGraceMs: number
   readonly #log: (message: string) => void
 
@@ -102,7 +112,8 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
     super()
     this.#host = options.host
     this.#refreshHz = options.refreshHz ?? 60
-    this.#sizesFor = options.sizesFor ?? sizesForPhone
+    this.#sizesFor = options.sizesFor ?? (() => catalogueSizes())
+    this.#pickSize = options.pickSize ?? pickMonitorSize
     this.#stopGraceMs = options.stopGraceMs ?? 4_000
     this.#log = options.log ?? (() => {})
     this.#host.on('exit', () => this.#onHelperExit())
@@ -163,20 +174,24 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
   }
 
   /**
-   * The phone's split needs a monitor of `size` physical pixels.
+   * The phone's split needs a monitor area of `size` physical pixels.
    *
-   * `screen` is the phone's viewport as it is now. After a rotation it is not the paired
-   * viewport turned sideways, so the sizes it may ask for next are prepared here, ahead of the
-   * attach below and in the same prompt, rather than costing one prompt per new size.
+   * The monitor is put at the nearest size of the fixed catalogue, not at `size` itself, and the
+   * phone letterboxes the video. With a fixed catalogue the driver's list does not change after
+   * the first prepare, so a rotation or a new split never restarts the driver.
+   *
+   * `screen` is the phone's viewport as it is now; it only matters when a custom `sizesFor`
+   * derives sizes from it.
    */
   streamRequested(phoneId: string, size: MonitorSize, screen?: PhoneScreen): void {
     if (this.#stopped || !this.#phones.has(phoneId)) return
+    const wanted = this.#pickSize({ width: size.width, height: size.height })
     if (screen) {
       const sizes = this.#sizesFor(screen.viewport, screen.devicePixelRatio)
-      this.#queuePrepare(phoneId, [size, ...sizes])
+      this.#queuePrepare(phoneId, [wanted, ...sizes])
     }
     const previous = this.#desired
-    this.#desired = { phoneId, size: { width: size.width, height: size.height } }
+    this.#desired = { phoneId, size: { width: wanted.width, height: wanted.height } }
     this.#blocked = false
     if (previous && previous.phoneId !== phoneId) {
       this.emit('preempted', { phoneId: previous.phoneId, by: phoneId })
