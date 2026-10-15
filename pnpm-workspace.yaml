@@ -27,6 +27,13 @@ catalog:
   '@types/react-dom': ^19.3.0
   zod: ^4.6.7
 
+# Packages allowed to run install scripts (Electron downloads its binary in one).
+# pnpm 11+ reads allowBuilds; pnpm 10 reads the two lists below it. Keep them in sync.
+allowBuilds:
+  electron: true
+  esbuild: true
+  electron-winstaller: false
+
 onlyBuiltDependencies:
   - electron
   - esbuild
