@@ -59,23 +59,42 @@ export const StreamRequestMessage = z.object({
 
 export const StreamStopMessage = z.object({ type: z.literal('stream.stop') })
 
-const SessionDescription = z.object({
-  kind: z.enum(['offer', 'answer']),
-  sdp: z.string().max(64 * 1024),
-})
+// WebRTC signaling rides the same socket; there is no STUN/TURN on a LAN, so a connection is
+// host candidates only. The PC sends the video, so the PC makes the offer and the phone answers.
+//
+// Each offer starts a new negotiation and carries a fresh `session` number. Everything that
+// belongs to it (the answer, both sides' candidates) repeats that number, so a straggler from
+// a negotiation that was already replaced is dropped instead of corrupting the new one.
 
+const RtcSession = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
+const Sdp = z.string().min(1).max(64 * 1024)
+
+const SdpOffer = z.object({ kind: z.literal('offer'), sdp: Sdp })
+const SdpAnswer = z.object({ kind: z.literal('answer'), sdp: Sdp })
+
+/** One ICE candidate; an empty `candidate` string is the end-of-candidates marker. */
 const IceCandidate = z.object({
   kind: z.literal('candidate'),
   candidate: z.string().max(4096),
   sdpMid: z.string().max(64).nullable(),
-  sdpMLineIndex: z.number().int().nonnegative().nullable(),
+  sdpMLineIndex: z.number().int().nonnegative().max(255).nullable(),
 })
 
-/** WebRTC signaling rides the same socket; no STUN/TURN on a LAN. */
-export const RtcSignalMessage = z.object({
+/** Phone -> PC: the answer to the PC's offer, then the phone's candidates. */
+export const PhoneRtcSignalMessage = z.object({
   type: z.literal('rtc.signal'),
-  signal: z.discriminatedUnion('kind', [SessionDescription, IceCandidate]),
+  session: RtcSession,
+  signal: z.discriminatedUnion('kind', [SdpAnswer, IceCandidate]),
 })
+
+/** PC -> phone: the offer that carries the monitor's video track, then the PC's candidates. */
+export const PcRtcSignalMessage = z.object({
+  type: z.literal('rtc.signal'),
+  session: RtcSession,
+  signal: z.discriminatedUnion('kind', [SdpOffer, IceCandidate]),
+})
+
+export type RtcCandidate = z.infer<typeof IceCandidate>
 
 export const PingMessage = z.object({ type: z.literal('ping'), at: z.number() })
 export const PongMessage = z.object({ type: z.literal('pong'), at: z.number() })
@@ -84,7 +103,7 @@ export const PhoneMessage = z.discriminatedUnion('type', [
   HelloMessage,
   StreamRequestMessage,
   StreamStopMessage,
-  RtcSignalMessage,
+  PhoneRtcSignalMessage,
   PingMessage,
   PongMessage,
 ])
@@ -109,6 +128,10 @@ export const WelcomeMessage = z.object({
   }),
 })
 
+/**
+ * Video is flowing to this phone, at `size` physical pixels. Sent once the first frame has been
+ * encoded, and again whenever the monitor's size changes while the stream stays up.
+ */
 export const StreamReadyMessage = z.object({
   type: z.literal('stream.ready'),
   size: Size,
@@ -142,7 +165,7 @@ export const PcMessage = z.discriminatedUnion('type', [
   WelcomeMessage,
   StreamReadyMessage,
   WidgetUpdateMessage,
-  RtcSignalMessage,
+  PcRtcSignalMessage,
   ErrorMessage,
   PingMessage,
   PongMessage,

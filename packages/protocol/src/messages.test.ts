@@ -32,9 +32,10 @@ describe('phone messages', () => {
         device: { viewport: { width: 800, height: 360 }, devicePixelRatio: 3 },
       },
       { type: 'stream.stop' },
-      { type: 'rtc.signal', signal: { kind: 'answer', sdp: 'v=0' } },
+      { type: 'rtc.signal', session: 1, signal: { kind: 'answer', sdp: 'v=0' } },
       {
         type: 'rtc.signal',
+        session: 1,
         signal: { kind: 'candidate', candidate: 'candidate:1', sdpMid: '0', sdpMLineIndex: 0 },
       },
       { type: 'ping', at: 1 },
@@ -115,6 +116,71 @@ describe('phone messages', () => {
       ok: false,
       error: 'frame too large',
     })
+  })
+})
+
+describe('rtc.signal', () => {
+  const answer = { kind: 'answer', sdp: 'v=0\r\n' }
+  const offer = { kind: 'offer', sdp: 'v=0\r\n' }
+  const candidate = {
+    kind: 'candidate',
+    candidate: 'candidate:1 1 udp 2122260223 192.168.1.20 54321 typ host',
+    sdpMid: '0',
+    sdpMLineIndex: 0,
+  }
+  const frame = (signal: unknown, session: unknown = 3) =>
+    JSON.stringify({ type: 'rtc.signal', session, signal })
+
+  it('lets the PC send an offer and the phone send an answer, and both send candidates', () => {
+    expect(parsePcMessage(frame(offer)).ok).toBe(true)
+    expect(parsePcMessage(frame(candidate)).ok).toBe(true)
+    expect(parsePhoneMessage(frame(answer)).ok).toBe(true)
+    expect(parsePhoneMessage(frame(candidate)).ok).toBe(true)
+  })
+
+  it('keeps the session number and the signal it was sent with', () => {
+    const parsed = parsePcMessage(frame(offer, 7))
+    expect(parsed).toEqual({ ok: true, message: { type: 'rtc.signal', session: 7, signal: offer } })
+  })
+
+  it('does not accept the wrong side sending an offer or an answer', () => {
+    expect(parsePhoneMessage(frame(offer)).ok).toBe(false)
+    expect(parsePcMessage(frame(answer)).ok).toBe(false)
+  })
+
+  it('accepts the end-of-candidates marker and candidates without a media section', () => {
+    const end = { kind: 'candidate', candidate: '', sdpMid: null, sdpMLineIndex: null }
+    expect(parsePcMessage(frame(end)).ok).toBe(true)
+    expect(parsePhoneMessage(frame(end)).ok).toBe(true)
+  })
+
+  it('rejects a signal without a session, or with one that is not a whole non-negative number', () => {
+    for (const session of [-1, 1.5, '1', null, Number.MAX_SAFE_INTEGER + 2]) {
+      expect(parsePhoneMessage(frame(answer, session)).ok, String(session)).toBe(false)
+    }
+    expect(parsePhoneMessage(JSON.stringify({ type: 'rtc.signal', signal: answer })).ok).toBe(false)
+    expect(parsePhoneMessage(frame(answer, 0)).ok).toBe(true)
+  })
+
+  it('rejects empty, oversized and unknown descriptions', () => {
+    expect(parsePcMessage(frame({ kind: 'offer', sdp: '' })).ok).toBe(false)
+    expect(parsePcMessage(frame({ kind: 'offer', sdp: 'v'.repeat(64 * 1024 + 1) })).ok).toBe(false)
+    expect(parsePcMessage(frame({ kind: 'rollback', sdp: 'v=0' })).ok).toBe(false)
+    expect(parsePhoneMessage(frame({ kind: 'answer' })).ok).toBe(false)
+  })
+
+  it('rejects candidates that are too long or point at an impossible media section', () => {
+    expect(parsePhoneMessage(frame({ ...candidate, candidate: 'c'.repeat(4097) })).ok).toBe(false)
+    expect(parsePhoneMessage(frame({ ...candidate, sdpMLineIndex: -1 })).ok).toBe(false)
+    expect(parsePhoneMessage(frame({ ...candidate, sdpMid: 5 })).ok).toBe(false)
+  })
+})
+
+describe('stream.ready', () => {
+  it('carries the size of the video that is flowing', () => {
+    const message = { type: 'stream.ready', size: { width: 1680, height: 1080 } } as const
+    expect(parsePcMessage(encode(message))).toEqual({ ok: true, message })
+    expect(parsePcMessage('{"type":"stream.ready","size":{"width":0,"height":1080}}').ok).toBe(false)
   })
 })
 
