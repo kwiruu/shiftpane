@@ -27,6 +27,11 @@ export function usePcConnection(): ConnectionState {
   return useSyncExternalStore(connection.subscribe, connection.getState)
 }
 
+/** Sends one message to the PC; false when the socket is not connected right now. */
+export function sendToPc(message: Parameters<PcConnection['send']>[0]): boolean {
+  return connection.send(message)
+}
+
 export function describeConnection(state: ConnectionState): {
   title: string
   detail: string

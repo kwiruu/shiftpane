@@ -1,6 +1,7 @@
 import { computeSplit, type Rect, SPLIT_PRESETS, type SplitPreset } from '@shiftpane/layout'
 import { useState } from 'react'
 import { describeConnection, usePcConnection } from './usePcConnection.ts'
+import { useStreamRequest } from './useStreamRequest.ts'
 import { useViewport } from './useViewport.ts'
 
 const placeAt = ({ x, y, width, height }: Rect) => ({ left: x, top: y, width, height })
@@ -21,12 +22,19 @@ const PRESET_LABELS: Record<SplitPreset, string> = {
 export function App() {
   const viewport = useViewport()
   const [preset, setPreset] = useState<SplitPreset>('70-30')
-  const status = describeConnection(usePcConnection())
+  const connection = usePcConnection()
+  const status = describeConnection(connection)
   const layout = computeSplit({
     viewport,
     devicePixelRatio: viewport.devicePixelRatio,
     monitorFraction: SPLIT_PRESETS[preset],
   })
+  // The PC's virtual monitor follows the split: it appears at the monitor area's size and goes
+  // away on the widgets-only split.
+  useStreamRequest(
+    layout.stream,
+    connection.status === 'connected' && connection.welcome.features.display,
+  )
 
   return (
     <main className="relative h-full overflow-hidden bg-surface-sunken text-ink">
