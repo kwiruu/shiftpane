@@ -29,6 +29,8 @@ nsis:
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true
+  # Adds (and on uninstall removes) the Windows Firewall rule phones need to connect.
+  include: build/installer.nsh
 
 mac:
   target: [dmg]

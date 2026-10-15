@@ -1,15 +1,19 @@
+import type { FirewallState } from '../../shared/firewall.ts'
 import type { ConnectedPhone, PairingState } from '../../shared/pairing.ts'
+import { FirewallNotice } from './FirewallNotice.tsx'
+import { useFirewall } from './useFirewall.ts'
 import { usePairing } from './usePairing.ts'
 
 const PLATFORM_LABEL = { windows: 'Windows', macos: 'macOS', linux: 'Linux' } as const
 
 export function App() {
   const pairing = usePairing()
+  const firewall = useFirewall()
   const { platform, versions } = window.shiftpane
 
   return (
     <main className="grid h-full grid-cols-[minmax(0,1fr)_20rem] gap-5 bg-surface-sunken p-5 text-ink">
-      <PairPanel state={pairing} />
+      <PairPanel state={pairing} firewall={firewall} />
       <aside className="flex min-h-0 flex-col gap-4 rounded-panel bg-surface p-5">
         <header>
           <h1 className="font-semibold text-lg">ShiftPane</h1>
@@ -23,7 +27,7 @@ export function App() {
   )
 }
 
-function PairPanel({ state }: { state: PairingState }) {
+function PairPanel({ state, firewall }: { state: PairingState; firewall: FirewallState }) {
   if (state.status === 'starting') {
     return <Panel title="Starting local server…" />
   }
@@ -32,12 +36,14 @@ function PairPanel({ state }: { state: PairingState }) {
   }
 
   const origin = `https://${state.host}:${state.port}`
+  const blocked = firewall.status === 'blocked'
   return (
-    <section className="flex flex-col items-center justify-center gap-5 rounded-panel bg-surface p-6 text-center">
+    <section className="flex flex-col items-center justify-center-safe gap-5 overflow-y-auto rounded-panel bg-surface p-6 text-center [scrollbar-width:thin]">
+      {blocked && <FirewallNotice key={firewall.reason} state={firewall} />}
       <img
         src={`data:image/svg+xml;utf8,${encodeURIComponent(state.qrSvg)}`}
         alt={`Pairing QR code for ${origin}`}
-        className="size-60 rounded-xl bg-white p-3"
+        className={`${blocked ? 'size-48' : 'size-60'} shrink-0 rounded-xl bg-white p-3`}
       />
       <div>
         <p className="font-semibold text-xl">Scan with your phone's camera</p>

@@ -38,4 +38,9 @@ export const IpcChannel = {
   pairingNewCode: 'pairing:new-code',
   pairingChanged: 'pairing:changed',
   phonesDisconnect: 'phones:disconnect',
+  firewallGet: 'firewall:get',
+  firewallChanged: 'firewall:changed',
+  firewallCheck: 'firewall:check',
+  firewallAllow: 'firewall:allow',
+  firewallOpenSettings: 'firewall:open-settings',
 } as const

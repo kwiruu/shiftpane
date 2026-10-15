@@ -1,4 +1,5 @@
 import { contextBridge, type IpcRendererEvent, ipcRenderer } from 'electron'
+import type { FirewallAllowResult, FirewallState } from '../shared/firewall.ts'
 import { IpcChannel, type PairingState } from '../shared/pairing.ts'
 import type { ShiftPaneApi } from './api.ts'
 
@@ -25,6 +26,18 @@ const api: ShiftPaneApi = {
     newCode: () => ipcRenderer.invoke(IpcChannel.pairingNewCode) as Promise<void>,
     disconnect: (phoneId) =>
       ipcRenderer.invoke(IpcChannel.phonesDisconnect, phoneId) as Promise<void>,
+  },
+  firewall: {
+    get: () => ipcRenderer.invoke(IpcChannel.firewallGet) as Promise<FirewallState>,
+    onChange: (listener) => {
+      const handler = (_event: IpcRendererEvent, state: FirewallState) => listener(state)
+      ipcRenderer.on(IpcChannel.firewallChanged, handler)
+      return () => ipcRenderer.off(IpcChannel.firewallChanged, handler)
+    },
+    check: () => ipcRenderer.invoke(IpcChannel.firewallCheck) as Promise<void>,
+    allow: () => ipcRenderer.invoke(IpcChannel.firewallAllow) as Promise<FirewallAllowResult>,
+    openSettings: (page) =>
+      ipcRenderer.invoke(IpcChannel.firewallOpenSettings, page) as Promise<void>,
   },
 }
 
