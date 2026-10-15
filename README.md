@@ -49,7 +49,7 @@ Secrets and system access stay on the PC; the phone only ever receives video and
 
 | | Windows | macOS | Linux |
 | --- | --- | --- | --- |
-| Virtual monitor | [Virtual Display Driver](https://github.com/VirtualDrivers/Virtual-Display-Driver) (user installs once via winget) | `CGVirtualDisplay`, built in (macOS 11+) | Compositor-specific: GNOME, KDE, wlroots, X11 |
+| Virtual monitor | [Virtual Display Driver](https://github.com/VirtualDrivers/Virtual-Display-Driver) (user installs once: `winget install`, then Install in VDD Control) | `CGVirtualDisplay`, built in (macOS 11+) | Compositor-specific: GNOME, KDE, wlroots, X11 |
 | Widgets and dashboard | ✓ | ✓ | ✓ |
 | Installer | NSIS `.exe` | `.dmg` | AppImage, `.deb` |
 

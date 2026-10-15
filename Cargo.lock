@@ -225,6 +225,8 @@ name = "shiftpane-windows"
 version = "0.1.0"
 dependencies = [
  "shiftpane-core",
+ "tracing",
+ "windows-sys",
 ]
 
 [[package]]

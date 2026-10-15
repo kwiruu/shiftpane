@@ -2,35 +2,73 @@
 //!
 //! Windows has no API for an app to create a monitor, so this backend drives
 //! [Virtual Display Driver](https://github.com/VirtualDrivers/Virtual-Display-Driver), an
-//! IddCx driver the user installs once (`winget install --id=VirtualDrivers.Virtual-Display-Driver -e`).
-//! We configure it; we never bundle or modify it.
+//! IddCx driver the user installs once. We configure it; we never modify it.
 //!
-//! Attach, once implemented, is:
-//! 1. write the requested mode into the resolution list in `vdd_settings.xml`;
-//! 2. reload the driver so it re-reads the list (device restart through SetupAPI;
-//!    `pnputil /restart-device` as the fallback);
-//! 3. switch the new monitor to the mode with `ChangeDisplaySettingsExW` and set its
-//!    DPI scaling, then report its device name so the desktop app can match Electron's
-//!    `display_id` and capture only that screen.
+//! How the pieces fit:
+//! - The driver offers a fixed list of resolutions read from `vdd_settings.xml`. Switching to
+//!   a size on that list is an ordinary `ChangeDisplaySettingsExW` call and needs no rights.
+//! - Adding a size means editing the file (under `C:\`) and restarting the driver, which does
+//!   need administrator rights. The helper does that by starting a copy of itself elevated
+//!   with a fixed numbers-only sub-command ([`elevated`]); the UAC prompt appears once per new
+//!   size and never again for that size.
+//! - Attach finds the driver's display (by adapter, never by `\\.\DISPLAYn`, which changes on
+//!   every driver restart), makes sure the size exists, then switches mode or puts the display
+//!   back on the desktop to the right of the others.
+//! - Detach takes the display off the desktop without elevation, and Windows moves its windows
+//!   back to the remaining screens. The helper only detaches a display it attached itself, so
+//!   closing ShiftPane never removes a monitor the user set up by hand.
 //!
-//! Detach disables the virtual adapter (the driver's monitor count cannot be zero), and
-//! Windows moves the windows on it back to the remaining screens.
-//!
-//! The settings file lives under `C:\`, so writing it needs elevation: the desktop app runs
-//! that one step through a UAC prompt, and everything else runs unelevated.
+//! Everything that decides something ([`settings`], [`plan`]) is plain Rust tested on every OS;
+//! the Win32 calls sit behind `cfg(windows)`.
 
 use std::path::{Path, PathBuf};
 
-use shiftpane_core::protocol::{BackendInfo, Capabilities, DisplayInfo, HelperError};
+use shiftpane_core::protocol::{BackendInfo, Capabilities, DisplayInfo, ErrorCode, HelperError};
 use shiftpane_core::{DisplayBackend, Mode};
 
+pub mod plan;
+pub mod settings;
+
+#[cfg(windows)]
+pub mod elevated;
+#[cfg(windows)]
+mod live;
+#[cfg(windows)]
+mod win32;
+
+/// Stand-ins so the crate still compiles on other OSes; the helper only builds this backend
+/// on Windows.
+#[cfg(not(windows))]
+mod live {
+    use super::{DisplayInfo, HelperError, Mode};
+
+    fn unsupported() -> HelperError {
+        HelperError::unsupported("the Windows backend only runs on Windows")
+    }
+
+    pub fn list_displays() -> Result<Vec<DisplayInfo>, HelperError> {
+        Err(unsupported())
+    }
+
+    pub fn attach(_mode: Mode) -> Result<DisplayInfo, HelperError> {
+        Err(unsupported())
+    }
+
+    pub fn detach() -> Result<(), HelperError> {
+        Ok(())
+    }
+}
+
 pub const DEFAULT_SETTINGS_PATH: &str = r"C:\VirtualDisplayDriver\vdd_settings.xml";
-pub const INSTALL_HINT: &str =
-    "Install Virtual Display Driver: winget install --id=VirtualDrivers.Virtual-Display-Driver -e";
+pub const INSTALL_HINT: &str = "Install Virtual Display Driver: run \
+    `winget install --id=VirtualDrivers.Virtual-Display-Driver -e`, then open VDD Control from \
+    the winget package folder and click Install";
 
 #[derive(Debug)]
 pub struct VddBackend {
     settings_path: PathBuf,
+    /// Whether this process put the virtual display on the desktop (or resized it).
+    attached: bool,
 }
 
 impl Default for VddBackend {
@@ -43,6 +81,7 @@ impl VddBackend {
     pub fn new(settings_path: impl Into<PathBuf>) -> Self {
         Self {
             settings_path: settings_path.into(),
+            attached: false,
         }
     }
 
@@ -60,6 +99,13 @@ impl VddBackend {
             ))
         }
     }
+
+    fn require_ready(&self) -> Result<(), HelperError> {
+        match self.not_ready_reason() {
+            Some(reason) => Err(HelperError::new(ErrorCode::BackendUnavailable, reason)),
+            None => Ok(()),
+        }
+    }
 }
 
 impl DisplayBackend for VddBackend {
@@ -69,11 +115,11 @@ impl DisplayBackend for VddBackend {
             name: "vdd".into(),
             ready: reason.is_none(),
             reason,
-            // What this backend will offer once attach is implemented.
             capabilities: Capabilities {
                 virtual_display: true,
                 resize: true,
-                scaling: true,
+                // Per-monitor DPI scaling has no documented Win32 API; attach rejects it.
+                scaling: false,
                 input_injection: true,
                 window_control: true,
             },
@@ -81,24 +127,22 @@ impl DisplayBackend for VddBackend {
     }
 
     fn list_displays(&self) -> Result<Vec<DisplayInfo>, HelperError> {
-        Err(HelperError::unsupported(
-            "display.list is not implemented on Windows yet",
-        ))
+        live::list_displays()
     }
 
-    fn attach(&mut self, _mode: Mode) -> Result<DisplayInfo, HelperError> {
-        if let Some(reason) = self.not_ready_reason() {
-            return Err(HelperError::new(
-                shiftpane_core::protocol::ErrorCode::BackendUnavailable,
-                reason,
-            ));
-        }
-        Err(HelperError::unsupported(
-            "display.attach is not implemented on Windows yet",
-        ))
+    fn attach(&mut self, mode: Mode) -> Result<DisplayInfo, HelperError> {
+        self.require_ready()?;
+        let display = live::attach(mode)?;
+        self.attached = true;
+        Ok(display)
     }
 
     fn detach(&mut self) -> Result<(), HelperError> {
+        if !self.attached {
+            return Ok(());
+        }
+        live::detach()?;
+        self.attached = false;
         Ok(())
     }
 }
@@ -113,5 +157,24 @@ mod tests {
         let info = backend.info();
         assert!(!info.ready);
         assert!(info.reason.unwrap().contains("winget install"));
+    }
+
+    #[test]
+    fn attach_without_the_driver_is_backend_unavailable() {
+        let mut backend = VddBackend::new("/definitely/not/here/vdd_settings.xml");
+        let mode = Mode {
+            width: 1440,
+            height: 1080,
+            refresh_hz: 60,
+            scale_percent: None,
+        };
+        let err = backend.attach(mode).unwrap_err();
+        assert_eq!(err.code, ErrorCode::BackendUnavailable);
+    }
+
+    #[test]
+    fn detach_is_a_no_op_when_this_process_attached_nothing() {
+        let mut backend = VddBackend::new("/definitely/not/here/vdd_settings.xml");
+        assert!(backend.detach().is_ok());
     }
 }

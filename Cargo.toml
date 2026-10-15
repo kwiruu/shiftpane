@@ -22,6 +22,7 @@ thiserror = "2"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt"] }
 ts-rs = { version = "12", features = ["serde-json-impl", "no-serde-warnings"] }
+windows-sys = "0.61"
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

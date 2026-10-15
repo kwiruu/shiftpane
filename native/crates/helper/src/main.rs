@@ -25,10 +25,23 @@ fn main() -> anyhow::Result<()> {
             println!("{}", serde_json_pretty(&backend.info())?);
             Ok(())
         }
+        // Internal: the elevated half of a Windows attach. Takes numbers only.
+        Some("apply-modes") => apply_modes(),
         Some(other) => anyhow::bail!(
             "unknown argument {other:?}; usage: shiftpane-helper [serve|info|--version]"
         ),
     }
+}
+
+#[cfg(windows)]
+fn apply_modes() -> anyhow::Result<()> {
+    let args: Vec<String> = std::env::args().skip(2).collect();
+    std::process::exit(shiftpane_windows::elevated::run(&args))
+}
+
+#[cfg(not(windows))]
+fn apply_modes() -> anyhow::Result<()> {
+    anyhow::bail!("apply-modes is only available on Windows")
 }
 
 fn serve() -> anyhow::Result<()> {
