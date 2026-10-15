@@ -33,6 +33,7 @@ export function App() {
   // away on the widgets-only split.
   useStreamRequest(
     layout.stream,
+    viewport,
     connection.status === 'connected' && connection.welcome.features.display,
   )
 
