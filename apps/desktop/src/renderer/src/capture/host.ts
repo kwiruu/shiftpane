@@ -4,6 +4,8 @@ import { CaptureCommand, type CaptureEvent } from '../../../shared/capture.ts'
 export const MAX_FRAME_RATE = 30
 /** Plenty for a 1080p desktop at 30 fps on a LAN, and it keeps bursts small. */
 export const MAX_BITRATE = 12_000_000
+/** Lets the window paint before the warm-up connection blocks the page while it is built. */
+const WARM_UP_DELAY_MS = 500
 /** How often the sender is asked whether encoded frames are going out yet. */
 const WATCH_INTERVAL_MS = 200
 
@@ -16,6 +18,12 @@ export interface CaptureChannel {
 
 export interface CaptureHostDependencies {
   channel: CaptureChannel
+  /**
+   * Opens and drops a throwaway connection shortly after start, so the first real offer does
+   * not also pay for Chromium's one-time WebRTC start-up, which can take a second or two. It
+   * runs after a short delay because it blocks the page while it constructs.
+   */
+  warmUp?: boolean
   /** Resolves with the display the main process armed; rejects when it did not. */
   getDisplayMedia(options: DisplayMediaStreamOptions): Promise<MediaStream>
   createPeerConnection(configuration: RTCConfiguration): RTCPeerConnection
@@ -107,6 +115,7 @@ export function startCaptureHost(deps: CaptureHostDependencies): () => void {
             if (width <= 0 || height <= 0) continue
             stopTimer(running.watcher)
             running.baseline = encoded
+            log(`session ${running.session}: frames flowing at ${width}x${height}`)
             send({ type: 'flowing', session: running.session, size: { width, height } })
             return
           }
@@ -120,7 +129,9 @@ export function startCaptureHost(deps: CaptureHostDependencies): () => void {
 
   async function start(session: number): Promise<void> {
     close()
+    const began = Date.now()
     const stream = await deps.getDisplayMedia(captureOptions)
+    log(`session ${session}: screen captured after ${Date.now() - began} ms`)
     const [track] = stream.getVideoTracks()
     if (!track) {
       for (const leftover of stream.getTracks()) leftover.stop()
@@ -170,6 +181,7 @@ export function startCaptureHost(deps: CaptureHostDependencies): () => void {
     const sdp = peer.localDescription?.sdp ?? offer.sdp ?? ''
     if (current !== running) return
     send({ type: 'rtc.signal', session, signal: { kind: 'offer', sdp } })
+    log(`session ${session}: offer sent after ${Date.now() - began} ms`)
     watch(running)
   }
 
@@ -250,6 +262,24 @@ export function startCaptureHost(deps: CaptureHostDependencies): () => void {
     }
   }
 
+  const warmUpTimer = deps.warmUp
+    ? globalThis.setTimeout(() => {
+        try {
+          const began = Date.now()
+          const warm = deps.createPeerConnection({ iceServers: [] })
+          warm.createDataChannel('warm-up')
+          void warm
+            .createOffer()
+            .then((offer) => warm.setLocalDescription(offer))
+            .then(() => log(`warm-up done in ${Date.now() - began} ms`))
+            .catch(() => {})
+          globalThis.setTimeout(() => warm.close(), 5_000)
+        } catch (error) {
+          log(`warm-up skipped: ${String(error)}`)
+        }
+      }, WARM_UP_DELAY_MS)
+    : undefined
+
   const unsubscribe = deps.channel.onCommand((raw) => {
     const parsed = CaptureCommand.safeParse(raw)
     if (!parsed.success) {
@@ -261,6 +291,7 @@ export function startCaptureHost(deps: CaptureHostDependencies): () => void {
   })
 
   return () => {
+    globalThis.clearTimeout(warmUpTimer)
     unsubscribe()
     close()
   }

@@ -35,6 +35,11 @@ if (!app.requestSingleInstanceLock()) {
   app.quit()
 }
 
+// WebRTC hides this PC's LAN addresses behind random `.local` names, which the phone could only
+// resolve over multicast DNS, and the firewall rule this app adds lets in TCP only. A phone is
+// paired with the QR code on this screen, so the PC puts its real addresses in its candidates.
+app.commandLine.appendSwitch('disable-features', 'WebRtcHideLocalIpsWithMdns')
+
 let mainWindow: BrowserWindow | null = null
 let pairing: PairingService | null = null
 let firewall: FirewallMonitor | null = null

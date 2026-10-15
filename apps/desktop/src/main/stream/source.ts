@@ -55,6 +55,7 @@ export async function findCaptureSource<Source extends ScreenSource>(
   options: FindSourceOptions = {},
 ): Promise<{ source: Source; display: ScreenDisplay; by: string }> {
   const { attempts = 25, intervalMs = 200, sleep = defaultSleep, log = () => {} } = options
+  const began = Date.now()
   let problem = 'the monitor was not found'
 
   for (let attempt = 1; attempt <= attempts; attempt += 1) {
@@ -73,7 +74,8 @@ export async function findCaptureSource<Source extends ScreenSource>(
       const found = matchSource(matched.display, sources)
       if (found.ok) {
         log(
-          `capturing ${found.source.id} (display ${matched.display.id}, matched by ${matched.by}) for ${target.id}`,
+          `capturing ${found.source.id} (display ${matched.display.id}, matched by ${matched.by}, ` +
+            `found in ${Date.now() - began} ms) for ${target.id}`,
         )
         return { source: found.source, display: matched.display, by: matched.by }
       }

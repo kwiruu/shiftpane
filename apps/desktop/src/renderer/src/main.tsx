@@ -13,6 +13,7 @@ startCaptureHost({
   channel: window.shiftpane.capture,
   getDisplayMedia: (options) => navigator.mediaDevices.getDisplayMedia(options),
   createPeerConnection: (configuration) => new RTCPeerConnection(configuration),
+  warmUp: true,
   log: (message) => console.info(`[capture] ${message}`),
 })
 

@@ -150,6 +150,9 @@ export class StreamManager {
     const { signal } = message
     if (signal.kind === 'candidate') {
       const candidate = resolveMdnsCandidate(signal.candidate, phone.address)
+      if (candidate !== signal.candidate) {
+        this.#log(`phone candidate ${signal.candidate.split(' ')[4]} -> ${phone.address}`)
+      }
       this.#options.bridge.send({ ...message, signal: { ...signal, candidate } })
       return
     }

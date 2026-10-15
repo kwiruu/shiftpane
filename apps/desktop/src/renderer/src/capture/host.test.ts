@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { CaptureEvent } from '../../../shared/capture.ts'
 import { MAX_BITRATE, MAX_FRAME_RATE, startCaptureHost } from './host.ts'
 
@@ -65,6 +65,10 @@ class FakePeer {
     this.transceiverInit = init
     return { sender: this.sender }
   }
+  readonly channels: string[] = []
+  createDataChannel(label: string) {
+    this.channels.push(label)
+  }
   async createOffer() {
     return { type: 'offer', sdp: 'v=0 offer' }
   }
@@ -98,7 +102,7 @@ class FakePeer {
   }
 }
 
-function setup(options: { capture?: () => Promise<FakeStream> } = {}) {
+function setup(options: { capture?: () => Promise<FakeStream>; warmUp?: boolean } = {}) {
   const events: CaptureEvent[] = []
   const logs: string[] = []
   const peers: FakePeer[] = []
@@ -110,6 +114,7 @@ function setup(options: { capture?: () => Promise<FakeStream> } = {}) {
   let timersCleared = 0
 
   const dispose = startCaptureHost({
+    warmUp: options.warmUp,
     channel: {
       onCommand: (l) => {
         listener = l
@@ -375,6 +380,41 @@ describe('startCaptureHost', () => {
     expect(t.peers).toHaveLength(0)
     expect(t.captureCalls).toHaveLength(0)
     expect(t.logs.filter((line) => line.includes('invalid'))).toHaveLength(4)
+  })
+
+  it('warms the network stack with a throwaway connection that sends nothing', async () => {
+    vi.useFakeTimers()
+    try {
+      const t = setup({ warmUp: true })
+      expect(t.peers).toHaveLength(0)
+      await vi.advanceTimersByTimeAsync(500)
+      expect(t.peers).toHaveLength(1)
+      const [warm] = t.peers
+      expect(warm?.channels).toEqual(['warm-up'])
+      expect(t.captureCalls).toHaveLength(0)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(warm?.localDescription).toEqual({ type: 'offer', sdp: 'v=0 offer' })
+      expect(t.events).toEqual([])
+      expect(warm?.closed).toBe(false)
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(warm?.closed).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('does not warm up unless asked, or after being disposed', async () => {
+    vi.useFakeTimers()
+    try {
+      expect(setup().peers).toHaveLength(0)
+      await vi.advanceTimersByTimeAsync(1_000)
+      const disposed = setup({ warmUp: true })
+      disposed.dispose()
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(disposed.peers).toHaveLength(0)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('stops everything when disposed', async () => {

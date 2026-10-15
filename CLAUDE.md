@@ -38,6 +38,11 @@ TypeScript, a Cargo workspace for the native helper. See README.md for the layou
   connection. Unit tests run unbundled `ws` and will not catch this, so test pairing against the built app.
 - The desktop app serves the phone app from `apps/phone/dist` in dev; rebuild the phone app to see phone changes there.
 - Set `ELECTRON_SKIP_BINARY_DOWNLOAD=1` for installs that never launch Electron (CI lint jobs do).
+- Streaming the virtual monitor: the main process arms the one `desktopCapturer` source (`main/stream/gate.ts`) and the
+  window takes it with `getDisplayMedia`; the session grants media permission only for that request. A source's
+  `display_id` is empty until `screen.getAllDisplays()` has run, and the helper's GDI device name is not Electron's
+  `Display.id`, so displays are joined on physical bounds (`main/stream/match.ts`). The first `RTCPeerConnection` in a
+  page costs 1-2 s, hence the warm-up connections on both sides.
 - Cloud sessions behind the agent proxy need `NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt` for Electron and
   electron-builder downloads; `.claude/hooks/session-start.sh` sets it.
 
