@@ -9,6 +9,11 @@ import {
   type SettingsPage,
 } from '../shared/firewall.ts'
 import { IpcChannel } from '../shared/pairing.ts'
+import {
+  bindDisplayToHub,
+  createDisplayController,
+  type DisplayController,
+} from './display/index.ts'
 import { FirewallMonitor } from './firewall/monitor.ts'
 import { allowThroughFirewall, queryFirewall } from './firewall/powershell.ts'
 import { PairingService } from './pairing.ts'
@@ -24,6 +29,7 @@ if (!app.requestSingleInstanceLock()) {
 let mainWindow: BrowserWindow | null = null
 let pairing: PairingService | null = null
 let firewall: FirewallMonitor | null = null
+let display: DisplayController | null = null
 
 const UNKNOWN_FIREWALL: FirewallState = { status: 'unknown' }
 const SettingsPageSchema = z.enum(SETTINGS_PAGES)
@@ -83,6 +89,15 @@ function createWindow(): BrowserWindow {
   // Coming back from Windows settings (network type, firewall) is the moment to look again.
   window.on('focus', () => {
     if (firewall?.state.status === 'blocked') void firewall.check()
+    // Coming back after installing the display driver. Only those two problems are re-checked
+    // on focus: retrying anything else could bring a UAC prompt straight back.
+    const problem = display?.state
+    if (
+      problem?.status === 'problem' &&
+      (problem.reason === 'driver-missing' || problem.reason === 'helper-missing')
+    ) {
+      void display?.recheck()
+    }
   })
   window.on('closed', () => {
     mainWindow = null
@@ -141,6 +156,17 @@ function registerFirewallIpc(service: PairingService, monitor: FirewallMonitor |
   })
 }
 
+function registerDisplayIpc(controller: DisplayController): void {
+  ipcMain.handle(IpcChannel.displayGet, (event) =>
+    fromMainWindow(event) ? controller.state : null,
+  )
+  // Takes no arguments: nothing from the renderer reaches the helper.
+  ipcMain.handle(IpcChannel.displayRetry, async (event) => {
+    if (fromMainWindow(event)) await controller.retry()
+  })
+  controller.on('change', (state) => mainWindow?.webContents.send(IpcChannel.displayChanged, state))
+}
+
 function registerIpc(service: PairingService): void {
   ipcMain.handle(IpcChannel.pairingGet, (event) => (fromMainWindow(event) ? service.state : null))
   ipcMain.handle(IpcChannel.pairingSelectHost, async (event, address: unknown) => {
@@ -175,11 +201,21 @@ app.on('before-quit', (event) => {
   if (stopping || !pairing) return
   stopping = true
   event.preventDefault()
-  void pairing.stop().finally(() => app.quit())
+  // Phones first, so nothing asks for a monitor while it is being removed.
+  void pairing
+    .stop()
+    .then(() => display?.stop())
+    .finally(() => app.quit())
 })
 
 app.whenReady().then(() => {
   hardenSession()
+  display = createDisplayController({
+    packaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    appPath: app.getAppPath(),
+  })
+  const controller = display
   pairing = new PairingService({
     dataDir: app.getPath('userData'),
     // Packaged: copied in by electron-builder. Dev: the phone app's own build output.
@@ -187,12 +223,16 @@ app.whenReady().then(() => {
       ? join(process.resourcesPath, 'phone')
       : join(app.getAppPath(), '../phone/dist'),
     platform,
+    displayAvailable: () => controller.available,
   })
+  bindDisplayToHub(controller, pairing.hub)
   registerIpc(pairing)
+  registerDisplayIpc(controller)
   firewall = createFirewallMonitor()
   registerFirewallIpc(pairing, firewall)
   mainWindow = createWindow()
   void pairing.start()
+  void controller.start()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) mainWindow = createWindow()
   })

@@ -14,6 +14,8 @@ export interface PairingServiceOptions {
   /** Built phone app to serve. */
   staticRoot: string
   platform: 'windows' | 'macos' | 'linux'
+  /** Whether a virtual monitor can be created; told to each phone in `welcome`. */
+  displayAvailable?: () => boolean
 }
 
 /**
@@ -36,8 +38,8 @@ export class PairingService extends EventEmitter<{ change: [PairingState] }> {
     this.hub = new PhoneHub({
       token: () => this.#token,
       pc: { name: hostname().slice(0, 128), platform: options.platform },
-      // Flipped on once the helper reports a ready virtual-display backend.
-      features: () => ({ display: false, remoteControl: false }),
+      // On once the helper reports a ready virtual-display backend.
+      features: () => ({ display: options.displayAvailable?.() ?? false, remoteControl: false }),
     })
     this.hub.on('change', () => void this.#publish())
   }

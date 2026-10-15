@@ -43,4 +43,7 @@ export const IpcChannel = {
   firewallCheck: 'firewall:check',
   firewallAllow: 'firewall:allow',
   firewallOpenSettings: 'firewall:open-settings',
+  displayGet: 'display:get',
+  displayChanged: 'display:changed',
+  displayRetry: 'display:retry',
 } as const

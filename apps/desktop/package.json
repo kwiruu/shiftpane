@@ -7,9 +7,9 @@
   "homepage": "https://github.com/kwiruu/shiftpane",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "node scripts/ensure-electron.mjs && electron-vite dev",
+    "dev": "node scripts/ensure-electron.mjs && node scripts/ensure-helper.mjs && electron-vite dev",
     "build": "electron-vite build",
-    "preview": "node scripts/ensure-electron.mjs && electron-vite preview",
+    "preview": "node scripts/ensure-electron.mjs && node scripts/ensure-helper.mjs && electron-vite preview",
     "typecheck": "tsc -p tsconfig.node.json && tsc -p tsconfig.web.json",
     "test": "vitest run --passWithNoTests",
     "package": "electron-builder --publish never",

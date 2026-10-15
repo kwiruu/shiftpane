@@ -1,6 +1,9 @@
+import type { DisplayState } from '../../shared/display.ts'
 import type { FirewallState } from '../../shared/firewall.ts'
 import type { ConnectedPhone, PairingState } from '../../shared/pairing.ts'
+import { DisplayNotice } from './DisplayNotice.tsx'
 import { FirewallNotice } from './FirewallNotice.tsx'
+import { useDisplay } from './useDisplay.ts'
 import { useFirewall } from './useFirewall.ts'
 import { usePairing } from './usePairing.ts'
 
@@ -9,11 +12,12 @@ const PLATFORM_LABEL = { windows: 'Windows', macos: 'macOS', linux: 'Linux' } as
 export function App() {
   const pairing = usePairing()
   const firewall = useFirewall()
+  const display = useDisplay()
   const { platform, versions } = window.shiftpane
 
   return (
     <main className="grid h-full grid-cols-[minmax(0,1fr)_20rem] gap-5 bg-surface-sunken p-5 text-ink">
-      <PairPanel state={pairing} firewall={firewall} />
+      <PairPanel state={pairing} firewall={firewall} display={display} />
       <aside className="flex min-h-0 flex-col gap-4 rounded-panel bg-surface p-5">
         <header>
           <h1 className="font-semibold text-lg">ShiftPane</h1>
@@ -21,13 +25,21 @@ export function App() {
             {PLATFORM_LABEL[platform]} · v{versions.app}
           </p>
         </header>
-        <PhoneList phones={pairing.status === 'ready' ? pairing.phones : []} />
+        <PhoneList phones={pairing.status === 'ready' ? pairing.phones : []} display={display} />
       </aside>
     </main>
   )
 }
 
-function PairPanel({ state, firewall }: { state: PairingState; firewall: FirewallState }) {
+function PairPanel({
+  state,
+  firewall,
+  display,
+}: {
+  state: PairingState
+  firewall: FirewallState
+  display: DisplayState
+}) {
   if (state.status === 'starting') {
     return <Panel title="Starting local server…" />
   }
@@ -37,13 +49,15 @@ function PairPanel({ state, firewall }: { state: PairingState; firewall: Firewal
 
   const origin = `https://${state.host}:${state.port}`
   const blocked = firewall.status === 'blocked'
+  const displayNotice = display.status === 'working' || display.status === 'problem'
   return (
     <section className="flex flex-col items-center justify-center-safe gap-5 overflow-y-auto rounded-panel bg-surface p-6 text-center [scrollbar-width:thin]">
       {blocked && <FirewallNotice key={firewall.reason} state={firewall} />}
+      {displayNotice && <DisplayNotice state={display} />}
       <img
         src={`data:image/svg+xml;utf8,${encodeURIComponent(state.qrSvg)}`}
         alt={`Pairing QR code for ${origin}`}
-        className={`${blocked ? 'size-48' : 'size-60'} shrink-0 rounded-xl bg-white p-3`}
+        className={`${blocked || displayNotice ? 'size-48' : 'size-60'} shrink-0 rounded-xl bg-white p-3`}
       />
       <div>
         <p className="font-semibold text-xl">Scan with your phone's camera</p>
@@ -100,7 +114,7 @@ function Panel({ title, detail, tone }: { title: string; detail?: string; tone?:
   )
 }
 
-function PhoneList({ phones }: { phones: ConnectedPhone[] }) {
+function PhoneList({ phones, display }: { phones: ConnectedPhone[]; display: DisplayState }) {
   return (
     <section className="flex min-h-0 flex-1 flex-col gap-2">
       <h2 className="font-medium text-ink-muted text-sm">Connected phones</h2>
@@ -120,6 +134,11 @@ function PhoneList({ phones }: { phones: ConnectedPhone[] }) {
                   {Math.round(phone.viewport.height * phone.devicePixelRatio)} ·{' '}
                   {phone.address.replace(/^::ffff:/, '')}
                 </p>
+                {display.status === 'attached' && display.phoneId === phone.id && (
+                  <p className="font-mono text-ok text-xs">
+                    Monitor {display.size.width}×{display.size.height}
+                  </p>
+                )}
               </div>
               <button
                 type="button"

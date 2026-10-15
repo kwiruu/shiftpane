@@ -1,4 +1,5 @@
 import { contextBridge, type IpcRendererEvent, ipcRenderer } from 'electron'
+import type { DisplayState } from '../shared/display.ts'
 import type { FirewallAllowResult, FirewallState } from '../shared/firewall.ts'
 import { IpcChannel, type PairingState } from '../shared/pairing.ts'
 import type { ShiftPaneApi } from './api.ts'
@@ -38,6 +39,15 @@ const api: ShiftPaneApi = {
     allow: () => ipcRenderer.invoke(IpcChannel.firewallAllow) as Promise<FirewallAllowResult>,
     openSettings: (page) =>
       ipcRenderer.invoke(IpcChannel.firewallOpenSettings, page) as Promise<void>,
+  },
+  display: {
+    get: () => ipcRenderer.invoke(IpcChannel.displayGet) as Promise<DisplayState>,
+    onChange: (listener) => {
+      const handler = (_event: IpcRendererEvent, state: DisplayState) => listener(state)
+      ipcRenderer.on(IpcChannel.displayChanged, handler)
+      return () => ipcRenderer.off(IpcChannel.displayChanged, handler)
+    },
+    retry: () => ipcRenderer.invoke(IpcChannel.displayRetry) as Promise<void>,
   },
 }
 

@@ -1,3 +1,4 @@
+import type { DisplayState } from '../shared/display.ts'
 import type { FirewallAllowResult, FirewallState, SettingsPage } from '../shared/firewall.ts'
 import type { PairingState } from '../shared/pairing.ts'
 
@@ -23,6 +24,14 @@ export interface ShiftPaneApi {
     /** Asks Windows (UAC prompt) to let phones on private networks reach ShiftPane. */
     allow(): Promise<FirewallAllowResult>
     openSettings(page: SettingsPage): Promise<void>
+  }
+  /** The virtual monitor that follows the paired phone. */
+  display: {
+    get(): Promise<DisplayState>
+    /** Calls `listener` on every change; returns an unsubscribe function. */
+    onChange(listener: (state: DisplayState) => void): () => void
+    /** Repeats what failed last (re-checks the driver, asks Windows for approval again). */
+    retry(): Promise<void>
   }
 }
 
