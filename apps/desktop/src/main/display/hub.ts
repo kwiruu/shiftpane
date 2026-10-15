@@ -18,8 +18,10 @@ const displayError = (message: string): DisplayError => ({
 
 /**
  * Connects phones to the virtual monitor: a phone that pairs gets its sizes prepared, its
- * `stream.request` / `stream.stop` move the monitor, and leaving removes it. The phone is told
- * with an `error` message when its monitor could not be provided.
+ * `stream.request` / `stream.stop` move the monitor, and leaving removes it. A `stream.request`
+ * carries the phone's current viewport, so a rotated phone gets the sizes of its real new
+ * viewport prepared as the monitor moves. The phone is told with an `error` message when its
+ * monitor could not be provided.
  *
  * It does not send `stream.ready`: that means video is flowing, which the capture code decides.
  * Listen to the controller's `attached` event for the display to capture.
@@ -48,8 +50,11 @@ export function bindDisplayToHub(display: DisplayBinding, hub: PhoneHub): () => 
   }
 
   const onMessage = (phone: PhoneInfo, message: PhoneMessage) => {
-    if (message.type === 'stream.request') display.streamRequested(phone.id, message.size)
-    else if (message.type === 'stream.stop') display.streamStopped(phone.id)
+    if (message.type === 'stream.request') {
+      display.streamRequested(phone.id, message.size, message.device)
+    } else if (message.type === 'stream.stop') {
+      display.streamStopped(phone.id)
+    }
   }
 
   const onFailed = ({ phoneId, problem }: { phoneId: string; problem: { message: string } }) => {

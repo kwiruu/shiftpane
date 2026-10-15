@@ -9,10 +9,10 @@ const QUALITIES: readonly Quality[] = ['full', 'half']
  * at each stream quality. Sent to the helper in one `display.prepare` so Windows asks for
  * administrator approval once per phone rather than once per size.
  *
- * The list is derived from the viewport the phone reported when it paired, with width and
- * height swapped for the other orientation. A browser whose toolbar later changes the
- * viewport by a few pixels asks for a size outside the list; that size is added on demand,
- * costing one more prompt.
+ * The list is derived from a viewport the phone reported, with width and height swapped for
+ * the other orientation. That swap is only a guess: after a rotation a browser's toolbars change
+ * the viewport, so the controller asks again with the viewport each `stream.request` carries,
+ * and the sizes of the real new viewport are added in one more prompt.
  *
  * Full-quality sizes come first so a truncated list keeps the common ones. The result is
  * unique, and never longer than the helper accepts (3 presets x 2 orientations x 2 qualities).

@@ -12,19 +12,23 @@ export interface DisplayHost {
   on(event: 'exit', listener: () => void): unknown
 }
 
-export interface PairedPhone {
-  id: string
-  /** CSS pixels, as the phone reported when it paired. */
+/** What the phone's screen looks like at one moment. */
+export interface PhoneScreen {
+  /** CSS pixels. */
   viewport: { width: number; height: number }
   devicePixelRatio: number
+}
+
+export interface PairedPhone extends PhoneScreen {
+  id: string
 }
 
 export interface DisplayControllerOptions {
   host: DisplayHost
   /** Refresh rate asked for; the driver picks the closest it offers. */
   refreshHz?: number
-  /** Every size a phone can need, prepared in one go when it pairs. */
-  sizesFor?: (viewport: PairedPhone['viewport'], devicePixelRatio: number) => DisplaySize[]
+  /** Every size a phone can need, prepared in one go when it pairs or its viewport changes. */
+  sizesFor?: (viewport: PhoneScreen['viewport'], devicePixelRatio: number) => DisplaySize[]
   /** How long `stop` waits for in-flight work before closing the helper anyway. */
   stopGraceMs?: number
   log?: (message: string) => void
@@ -57,6 +61,7 @@ type Job =
   | { kind: 'detach' }
 
 const sameSize = (a: MonitorSize, b: MonitorSize) => a.width === b.width && a.height === b.height
+const keyOf = (size: MonitorSize) => `${size.width}x${size.height}`
 
 /**
  * Makes the virtual monitor follow the phone.
@@ -83,6 +88,8 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
   #prepares: Array<{ phoneId: string; sizes: DisplaySize[] }> = []
   /** Prepares that did not complete (declined prompt, driver missing), kept for a retry. */
   #unprepared: Array<{ phoneId: string; sizes: DisplaySize[] }> = []
+  /** Sizes the driver is known to offer (`keyOf`), from prepares that completed. */
+  readonly #prepared = new Set<string>()
   #desired: Want | null = null
   #applied: Have | null = null
   /** A helper call failed; hold off until the wanted state changes or the user retries. */
@@ -141,9 +148,7 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
     if (this.#stopped) return
     this.#phones.add(phone.id)
     const sizes = this.#sizesFor(phone.viewport, phone.devicePixelRatio)
-    if (sizes.length === 0) return
-    this.#prepares.push({ phoneId: phone.id, sizes })
-    void this.#pump()
+    if (this.#queuePrepare(phone.id, sizes)) void this.#pump()
   }
 
   phoneLeft(phoneId: string): void {
@@ -157,9 +162,19 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
     void this.#pump()
   }
 
-  /** The phone's split needs a monitor of `size` physical pixels. */
-  streamRequested(phoneId: string, size: MonitorSize): void {
+  /**
+   * The phone's split needs a monitor of `size` physical pixels.
+   *
+   * `screen` is the phone's viewport as it is now. After a rotation it is not the paired
+   * viewport turned sideways, so the sizes it may ask for next are prepared here, ahead of the
+   * attach below and in the same prompt, rather than costing one prompt per new size.
+   */
+  streamRequested(phoneId: string, size: MonitorSize, screen?: PhoneScreen): void {
     if (this.#stopped || !this.#phones.has(phoneId)) return
+    if (screen) {
+      const sizes = this.#sizesFor(screen.viewport, screen.devicePixelRatio)
+      this.#queuePrepare(phoneId, [size, ...sizes])
+    }
     const previous = this.#desired
     this.#desired = { phoneId, size: { width: size.width, height: size.height } }
     this.#blocked = false
@@ -210,6 +225,29 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
   #requeueUnprepared(): void {
     this.#prepares.push(...this.#unprepared.filter((job) => this.#phones.has(job.phoneId)))
     this.#unprepared = []
+  }
+
+  /**
+   * Queues a prepare for the sizes in `sizes` that the driver does not have and no pending
+   * prepare covers, so the same viewport arriving again costs no helper call. Returns whether
+   * anything was queued.
+   *
+   * A size whose prepare failed counts as covered: asking again is the retry button's job, and
+   * the attach still adds the one size it needs.
+   */
+  #queuePrepare(phoneId: string, sizes: DisplaySize[]): boolean {
+    const jobs = [...this.#prepares, ...this.#unprepared]
+    const covered = (key: string) =>
+      this.#prepared.has(key) || jobs.some((job) => job.sizes.some((size) => keyOf(size) === key))
+
+    const missing = new Map<string, DisplaySize>()
+    for (const { width, height } of sizes) {
+      const key = keyOf({ width, height })
+      if (!covered(key)) missing.set(key, { width, height })
+    }
+    if (missing.size === 0) return false
+    this.#prepares.push({ phoneId, sizes: [...missing.values()] })
+    return true
   }
 
   async #drain(): Promise<void> {
@@ -271,6 +309,7 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
       if (!ready) return
       const result = await channel.call('display.prepare', { sizes })
       this.#unprepared = this.#unprepared.filter((pending) => pending !== job)
+      for (const size of sizes) this.#prepared.add(keyOf(size))
       this.#log(`prepared ${sizes.length} sizes, ${result.added} added`)
       // Adding sizes restarts the driver, which can take a monitor that is on the desktop
       // with it. Forget it so the next step puts the wanted size back.
@@ -281,7 +320,16 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
       }
       this.#settle()
     } catch (error) {
-      this.#setProblem(describeProblem(error, null), null)
+      const problem = describeProblem(error, null)
+      this.#setProblem(problem, null)
+      // A phone is waiting on a size this prepare was meant to add. The attach that would follow
+      // asks Windows for the same approval straight after it was declined, so wait for the phone
+      // to ask again, or for "Try again", instead.
+      const want = this.#desired
+      if (want && !this.#prepared.has(keyOf(want.size))) {
+        this.#blocked = true
+        this.emit('failed', { phoneId: want.phoneId, problem })
+      }
     }
   }
 
@@ -340,6 +388,8 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
     const { backend } = await channel.call('helper.hello')
     this.#available = backend.ready && backend.capabilities.virtualDisplay
     if (this.#available) return true
+    // A driver that was removed and put back starts from its default sizes.
+    this.#prepared.clear()
     const message = backend.reason ?? `The ${backend.name} display backend is not ready.`
     this.#setProblem(
       { reason: backend.name === 'vdd' ? 'driver-missing' : 'unsupported', message },

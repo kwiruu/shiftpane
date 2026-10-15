@@ -1,9 +1,11 @@
 import type { DisplayInfo, HelloInfo, HelperError } from '@shiftpane/helper-client'
 import { HelperCallError } from '@shiftpane/helper-client'
+import { computeSplit, SPLIT_PRESETS, type SplitPreset } from '@shiftpane/layout'
 import { describe, expect, it, vi } from 'vitest'
-import type { DisplayState } from '../../shared/display.ts'
-import { DisplayController, type PairedPhone } from './controller.ts'
+import type { DisplayState, MonitorSize } from '../../shared/display.ts'
+import { DisplayController, type DisplayControllerOptions, type PairedPhone } from './controller.ts'
 import type { HelperChannel } from './helper-host.ts'
+import { sizesForPhone } from './sizes.ts'
 
 interface Recorded {
   method: string
@@ -31,9 +33,9 @@ const readyHello = (overrides: Partial<HelloInfo['backend']> = {}): HelloInfo =>
 const failure = (code: HelperError['code'], message: string) =>
   new HelperCallError({ code, message })
 
-const phone = (id: string): PairedPhone => ({
+const phone = (id: string, viewport = { width: 800, height: 360 }): PairedPhone => ({
   id,
-  viewport: { width: 800, height: 360 },
+  viewport,
   devicePixelRatio: 3,
 })
 
@@ -42,9 +44,17 @@ const SIZES = [
   { width: 1080, height: 1440 },
 ]
 
+/** One size per viewport, so tests can tell which viewport a prepare came from. */
+const scaled: NonNullable<DisplayControllerOptions['sizesFor']> = (viewport, devicePixelRatio) => [
+  { width: viewport.width * devicePixelRatio, height: viewport.height * devicePixelRatio },
+]
+
 type Responder = (call: Recorded) => unknown | Promise<unknown>
 
-function setup(responder: Responder = () => undefined) {
+function setup(
+  responder: Responder = () => undefined,
+  sizesFor: NonNullable<DisplayControllerOptions['sizesFor']> = () => SIZES,
+) {
   const calls: Recorded[] = []
   const exitListeners: Array<() => void> = []
   let override = responder
@@ -101,7 +111,7 @@ function setup(responder: Responder = () => undefined) {
     },
   }
 
-  const controller = new DisplayController({ host, sizesFor: () => SIZES, stopGraceMs: 50 })
+  const controller = new DisplayController({ host, sizesFor, stopGraceMs: 50 })
   const states: DisplayState[] = []
   controller.on('change', (state) => states.push(state))
   const events: string[] = []
@@ -122,12 +132,18 @@ function setup(responder: Responder = () => undefined) {
         const { width, height } = c.params as { width: number; height: number }
         return `${width}x${height}`
       })
+  /** The size lists sent in each `display.prepare`, as `WxH` strings. */
+  const prepares = () =>
+    calls
+      .filter((c) => c.method === 'display.prepare')
+      .map((c) => (c.params as { sizes: MonitorSize[] }).sizes.map((s) => `${s.width}x${s.height}`))
   return {
     controller,
     host,
     calls,
     methods,
     attaches,
+    prepares,
     states,
     events,
     respondWith: (next: Responder) => {
@@ -460,17 +476,277 @@ describe('DisplayController: failures', () => {
 describe('DisplayController: prepare restarts the driver', () => {
   it('puts the wanted size back when preparing added sizes under an attached monitor', async () => {
     let added = 0
-    const { controller, attaches } = setup(({ method }) =>
-      method === 'display.prepare' ? { type: 'prepared', added } : undefined,
+    const { controller, attaches } = setup(
+      ({ method }) => (method === 'display.prepare' ? { type: 'prepared', added } : undefined),
+      scaled,
     )
     controller.phoneJoined(phone('a'))
     controller.streamRequested('a', { width: 1440, height: 1080 })
     await settled(controller, 'attached')
 
     added = 2 // a second phone's sizes had to be added, which restarts the driver
-    controller.phoneJoined(phone('b'))
+    controller.phoneJoined(phone('b', { width: 1024, height: 768 }))
     await vi.waitFor(() => expect(attaches()).toEqual(['1440x1080', '1440x1080']))
     await settled(controller, 'attached')
+  })
+})
+
+describe('DisplayController: a viewport that changed after pairing', () => {
+  // `scaled` turns the 800x360 viewport (at 3x) the phone paired with into 2400x1080.
+  const rotated = { viewport: { width: 892, height: 412 }, devicePixelRatio: 3 } // 2676x1236
+  const paired = { viewport: { width: 800, height: 360 }, devicePixelRatio: 3 }
+
+  it('prepares the sizes of the viewport a request carries before attaching', async () => {
+    const { controller, methods, prepares } = setup(undefined, scaled)
+    controller.phoneJoined(phone('a'))
+    controller.streamRequested('a', { width: 1680, height: 1080 }, rotated)
+    await settled(controller, 'attached')
+
+    // The requested size comes first, then what this viewport can produce; nothing twice.
+    expect(prepares()).toEqual([['2400x1080'], ['1680x1080', '2676x1236']])
+    expect(methods().filter((m) => m !== 'helper.hello')).toEqual([
+      'display.prepare',
+      'display.prepare',
+      'display.attach',
+    ])
+  })
+
+  it('leaves out sizes that are already prepared, and skips the prepare when none are left', async () => {
+    const { controller, prepares, attaches } = setup(undefined, scaled)
+    controller.phoneJoined(phone('a'))
+    controller.streamRequested('a', { width: 1680, height: 1080 }, rotated)
+    await settled(controller, 'attached')
+    expect(prepares()).toHaveLength(2)
+
+    // Back to the viewport it paired with, then to the rotated one again.
+    controller.streamRequested('a', { width: 2400, height: 1080 }, paired)
+    await vi.waitFor(() => expect(attaches()).toEqual(['1680x1080', '2400x1080']))
+    controller.streamRequested('a', { width: 1680, height: 1080 }, rotated)
+    await vi.waitFor(() => expect(attaches()).toHaveLength(3))
+    expect(prepares()).toHaveLength(2)
+  })
+
+  it('prepares only what is new when a rotated viewport shares some sizes with the paired one', async () => {
+    const shared = { width: 2400, height: 1080 }
+    const { controller, prepares } = setup(undefined, (viewport) =>
+      viewport.width === 800 ? [shared] : [shared, { width: 2676, height: 1236 }],
+    )
+    controller.phoneJoined(phone('a'))
+    controller.streamRequested('a', { width: 2400, height: 1080 }, rotated)
+    await settled(controller, 'attached')
+    expect(prepares()).toEqual([['2400x1080'], ['2676x1236']])
+  })
+
+  it('only attaches when the request carries no viewport', async () => {
+    const { controller, prepares, attaches } = setup(undefined, scaled)
+    controller.phoneJoined(phone('a'))
+    controller.streamRequested('a', { width: 1680, height: 1080 })
+    await settled(controller, 'attached')
+    expect(prepares()).toEqual([['2400x1080']])
+    expect(attaches()).toEqual(['1680x1080'])
+  })
+
+  it('does not queue sizes that are already waiting behind a prompt', async () => {
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { controller, prepares } = setup(async ({ method }) => {
+      if (method === 'display.prepare') await gate // the UAC prompt is open
+      return undefined
+    }, scaled)
+    controller.phoneJoined(phone('a'))
+    await vi.waitFor(() => expect(prepares()).toHaveLength(1))
+    // The phone's first request arrives with the viewport it paired with, as the prompt is open.
+    controller.streamRequested('a', { width: 2400, height: 1080 }, paired)
+    release()
+    await settled(controller, 'attached')
+    expect(prepares()).toEqual([['2400x1080']])
+  })
+
+  it('prepares the same sizes once when two phones have the same screen', async () => {
+    const { controller, prepares } = setup(undefined, scaled)
+    controller.phoneJoined(phone('a'))
+    controller.phoneJoined(phone('b'))
+    await settled(controller, 'idle')
+    expect(prepares()).toEqual([['2400x1080']])
+  })
+
+  it('prepares again after the driver went missing and came back', async () => {
+    let ready = true
+    const { controller, prepares } = setup(({ method }) =>
+      method === 'helper.hello'
+        ? { type: 'hello', ...readyHello({ ready, reason: ready ? undefined : 'missing' }) }
+        : undefined,
+    )
+    controller.phoneJoined(phone('a'))
+    await settled(controller, 'idle')
+    ready = false
+    await controller.recheck()
+    ready = true
+    await controller.recheck()
+
+    controller.streamRequested('a', { width: 1440, height: 1080 }, paired)
+    await settled(controller, 'attached')
+    expect(prepares()).toEqual([
+      ['1440x1080', '1080x1440'],
+      ['1440x1080', '1080x1440'],
+    ])
+  })
+
+  describe('when Windows asks for approval and the user declines', () => {
+    function declining() {
+      let allowed = false
+      const harness = setup(({ method }) => {
+        if (method === 'display.prepare' && !allowed) {
+          return failure('permissionDenied', 'Administrator approval was declined')
+        }
+        return undefined
+      }, scaled)
+      harness.controller.phoneJoined(phone('a'))
+      return {
+        ...harness,
+        allow: () => {
+          allowed = true
+        },
+      }
+    }
+
+    it('tells the phone and does not ask again for the attach that follows', async () => {
+      const { controller, attaches, events } = declining()
+      controller.streamRequested('a', { width: 1680, height: 1080 }, rotated)
+      await settled(controller, 'problem')
+      await new Promise((resolve) => setTimeout(resolve, 30))
+
+      expect(events).toContain('failed a permission-denied')
+      expect(attaches()).toEqual([])
+    })
+
+    it('goes ahead with the attach when the size it needs was prepared earlier', async () => {
+      let deny = false
+      const { controller, attaches } = setup(({ method }) => {
+        if (method === 'display.prepare' && deny) {
+          return failure('permissionDenied', 'Administrator approval was declined')
+        }
+        return undefined
+      }, scaled)
+      controller.phoneJoined(phone('a'))
+      await settled(controller, 'idle')
+
+      deny = true
+      // Not in the paired list, so this viewport needs a prepare, which is declined; the size
+      // asked for is already known to the driver, so the attach still goes through.
+      controller.streamRequested('a', { width: 2400, height: 1080 }, rotated)
+      await settled(controller, 'attached')
+      expect(attaches()).toEqual(['2400x1080'])
+    })
+
+    it('"Try again" prepares and then attaches', async () => {
+      const { controller, attaches, prepares, allow } = declining()
+      controller.streamRequested('a', { width: 1680, height: 1080 }, rotated)
+      await settled(controller, 'problem')
+
+      allow()
+      await controller.retry()
+      expect(controller.state).toMatchObject({ status: 'attached', size: { width: 1680 } })
+      expect(attaches()).toEqual(['1680x1080'])
+      // The pairing prepare failed first, then the rotated one, and both ran again.
+      expect(prepares().length).toBeGreaterThanOrEqual(3)
+    })
+  })
+})
+
+describe('DisplayController: the prompt budget on a real phone', () => {
+  /**
+   * A driver that keeps a list of sizes: adding any is one UAC prompt, whether `display.prepare`
+   * or `display.attach` does it.
+   */
+  function fakeDriver() {
+    const listed = new Set<string>()
+    let prompts = 0
+    const responder: Responder = ({ method, params }) => {
+      if (method === 'display.prepare') {
+        const { sizes } = params as { sizes: MonitorSize[] }
+        const missing = sizes.filter((s) => !listed.has(`${s.width}x${s.height}`))
+        if (missing.length > 0) prompts += 1
+        for (const s of missing) listed.add(`${s.width}x${s.height}`)
+        return { type: 'prepared', added: missing.length }
+      }
+      if (method === 'display.attach') {
+        const { width, height } = params as MonitorSize
+        if (!listed.has(`${width}x${height}`)) {
+          prompts += 1
+          listed.add(`${width}x${height}`)
+        }
+      }
+      return undefined
+    }
+    return { responder, prompts: () => prompts }
+  }
+
+  const DPR = 2.625
+  type Viewport = { width: number; height: number }
+
+  function phoneOn(driver: ReturnType<typeof fakeDriver>, paired: Viewport) {
+    const { controller } = setup(driver.responder, sizesForPhone)
+    controller.phoneJoined({ id: 'a', viewport: paired, devicePixelRatio: DPR })
+    const split = (viewport: Viewport, preset: SplitPreset) => {
+      const { stream } = computeSplit({
+        viewport,
+        devicePixelRatio: DPR,
+        monitorFraction: SPLIT_PRESETS[preset],
+      })
+      if (!stream) throw new Error('the preset has no monitor')
+      return stream
+    }
+    /** What the phone does after a split or rotation: request, and wait for the monitor. */
+    const choose = async (viewport: Viewport, preset: SplitPreset) => {
+      const size = split(viewport, preset)
+      controller.streamRequested('a', size, { viewport, devicePixelRatio: DPR })
+      await vi.waitFor(() =>
+        expect(controller.state).toEqual({ status: 'attached', phoneId: 'a', size }),
+      )
+    }
+    return { choose, split }
+  }
+
+  it('costs one prompt at pairing and one more after the first rotation, not one per preset', async () => {
+    const driver = fakeDriver()
+    const portrait = { width: 412, height: 800 }
+    // What Chrome reports once the phone is sideways: the toolbar leaves 892x412, not the
+    // 800x412 that turning the paired viewport would give.
+    const landscape = { width: 892, height: 412 }
+    const { choose, split } = phoneOn(driver, portrait)
+
+    // The premise: the swapped guess does not contain the landscape size, so it needs a prompt.
+    expect(sizesForPhone(portrait, DPR)).not.toContainEqual(split(landscape, '70-30'))
+
+    await choose(portrait, '70-30')
+    await choose(portrait, '50-50')
+    await choose(portrait, 'monitor')
+    expect(driver.prompts()).toBe(1)
+
+    await choose(landscape, '70-30')
+    expect(driver.prompts()).toBe(2)
+    await choose(landscape, '50-50')
+    await choose(landscape, 'monitor')
+    expect(driver.prompts()).toBe(2)
+
+    // Rotating back and forth afterwards is free: both viewports are in the driver already.
+    await choose(portrait, '70-30')
+    await choose(landscape, '50-50')
+    await choose(portrait, 'monitor')
+    expect(driver.prompts()).toBe(2)
+  })
+
+  it('costs nothing extra when the rotated viewport is exactly the swapped one', async () => {
+    const driver = fakeDriver()
+    const { choose } = phoneOn(driver, { width: 768, height: 1024 })
+
+    await choose({ width: 768, height: 1024 }, '70-30')
+    await choose({ width: 1024, height: 768 }, '70-30')
+    await choose({ width: 1024, height: 768 }, 'monitor')
+    expect(driver.prompts()).toBe(1)
   })
 })
 

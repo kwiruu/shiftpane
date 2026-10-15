@@ -37,7 +37,8 @@ function fakeDisplay() {
   const display = {
     phoneJoined: (phone: unknown) => log.push(['joined', phone]),
     phoneLeft: (id: string) => log.push(['left', id]),
-    streamRequested: (id: string, size: unknown) => log.push(['request', id, size]),
+    streamRequested: (id: string, size: unknown, screen: unknown) =>
+      log.push(['request', id, size, screen]),
     streamStopped: (id: string) => log.push(['stop', id]),
     on: emitter.on.bind(emitter),
     off: emitter.off.bind(emitter),
@@ -95,9 +96,51 @@ describe('bindDisplayToHub', () => {
     )
     handlers.onMessage(JSON.stringify({ type: 'stream.stop' }))
     expect(log.slice(1)).toEqual([
-      ['request', id, { width: 1440, height: 1080 }],
+      ['request', id, { width: 1440, height: 1080 }, undefined],
       ['stop', id],
     ])
+  })
+
+  it('hands the controller the viewport a stream.request carries', () => {
+    const hub = makeHub()
+    const { display, log } = fakeDisplay()
+    bindDisplayToHub(display, hub)
+    // Paired in portrait; the phone has since rotated and reports what it really has.
+    const { handlers } = pair(hub, { width: 412, height: 800 })
+    const id = hub.phones[0]?.id
+    handlers.onMessage(
+      JSON.stringify({
+        type: 'stream.request',
+        size: { width: 1680, height: 1080 },
+        quality: 'full',
+        device: { viewport: { width: 892, height: 412 }, devicePixelRatio: 2.625 },
+      }),
+    )
+    expect(log.slice(1)).toEqual([
+      [
+        'request',
+        id,
+        { width: 1680, height: 1080 },
+        { viewport: { width: 892, height: 412 }, devicePixelRatio: 2.625 },
+      ],
+    ])
+  })
+
+  it('does not forward a stream.request whose viewport is not valid', () => {
+    const hub = makeHub()
+    const { display, log } = fakeDisplay()
+    bindDisplayToHub(display, hub)
+    const { handlers, sent } = pair(hub)
+    handlers.onMessage(
+      JSON.stringify({
+        type: 'stream.request',
+        size: { width: 1680, height: 1080 },
+        quality: 'full',
+        device: { viewport: { width: -1, height: 412 }, devicePixelRatio: 2 },
+      }),
+    )
+    expect(log.map(([kind]) => kind)).toEqual(['joined'])
+    expect(sent.at(-1)).toMatchObject({ type: 'error', code: 'bad-message' })
   })
 
   it('tells the controller when a phone leaves', () => {
