@@ -180,7 +180,9 @@ describe('stream.ready', () => {
   it('carries the size of the video that is flowing', () => {
     const message = { type: 'stream.ready', size: { width: 1680, height: 1080 } } as const
     expect(parsePcMessage(encode(message))).toEqual({ ok: true, message })
-    expect(parsePcMessage('{"type":"stream.ready","size":{"width":0,"height":1080}}').ok).toBe(false)
+    expect(parsePcMessage('{"type":"stream.ready","size":{"width":0,"height":1080}}').ok).toBe(
+      false,
+    )
   })
 })
 

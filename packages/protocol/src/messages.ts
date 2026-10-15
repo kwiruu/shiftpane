@@ -67,7 +67,10 @@ export const StreamStopMessage = z.object({ type: z.literal('stream.stop') })
 // a negotiation that was already replaced is dropped instead of corrupting the new one.
 
 const RtcSession = z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER)
-const Sdp = z.string().min(1).max(64 * 1024)
+const Sdp = z
+  .string()
+  .min(1)
+  .max(64 * 1024)
 
 const SdpOffer = z.object({ kind: z.literal('offer'), sdp: Sdp })
 const SdpAnswer = z.object({ kind: z.literal('answer'), sdp: Sdp })
