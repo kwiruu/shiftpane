@@ -13,6 +13,7 @@ export const PROTOCOL_VERSION = 1
 
 const Dimension = z.number().int().positive().max(16_384)
 const Size = z.object({ width: Dimension, height: Dimension })
+const DevicePixelRatio = z.number().positive().max(8)
 
 export const Quality = z.enum(['full', 'half', 'auto'])
 export type Quality = z.infer<typeof Quality>
@@ -30,17 +31,30 @@ export const HelloMessage = z.object({
     name: z.string().trim().min(1).max(64),
     /** CSS pixels. */
     viewport: Size,
-    devicePixelRatio: z.number().positive().max(8),
+    devicePixelRatio: DevicePixelRatio,
     touch: z.boolean(),
   }),
 })
 
-/** Sent when the user releases the split divider, after a short pause. */
+/**
+ * Sent when the split changes (a divider release, a rotation, a collapsing browser toolbar),
+ * after a short pause.
+ */
 export const StreamRequestMessage = z.object({
   type: z.literal('stream.request'),
   /** Physical pixels, already clamped and rounded by `@shiftpane/layout`. */
   size: Size,
   quality: Quality,
+  /**
+   * The screen `size` was computed from, as it is now. A phone's viewport after a rotation is
+   * not the paired viewport turned sideways (browser chrome changes `innerHeight`), so the PC
+   * uses this to add the sizes this screen may ask for next to the virtual display in the same
+   * step as the resize, behind one administrator prompt.
+   *
+   * Optional so a phone that does not send it still works, at the cost of one prompt per new
+   * size; that is why this addition did not bump `PROTOCOL_VERSION`.
+   */
+  device: z.object({ viewport: Size, devicePixelRatio: DevicePixelRatio }).optional(),
 })
 
 export const StreamStopMessage = z.object({ type: z.literal('stream.stop') })

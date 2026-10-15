@@ -25,6 +25,12 @@ describe('phone messages', () => {
     const messages: PhoneMessage[] = [
       hello(),
       { type: 'stream.request', size: { width: 1440, height: 1080 }, quality: 'auto' },
+      {
+        type: 'stream.request',
+        size: { width: 1680, height: 1080 },
+        quality: 'full',
+        device: { viewport: { width: 800, height: 360 }, devicePixelRatio: 3 },
+      },
       { type: 'stream.stop' },
       { type: 'rtc.signal', signal: { kind: 'answer', sdp: 'v=0' } },
       {
@@ -57,6 +63,50 @@ describe('phone messages', () => {
         '{"type":"stream.request","size":{"width":1440.5,"height":1080},"quality":"full"}',
       ).ok,
     ).toBe(false)
+  })
+
+  describe('stream.request device', () => {
+    const request = (device: unknown) =>
+      JSON.stringify({
+        type: 'stream.request',
+        size: { width: 1680, height: 1080 },
+        quality: 'full',
+        device,
+      })
+
+    it('keeps the viewport and pixel ratio it was sent with', () => {
+      const device = { viewport: { width: 892, height: 412 }, devicePixelRatio: 2.625 }
+      const parsed = parsePhoneMessage(request(device))
+      expect(
+        parsed.ok && parsed.message.type === 'stream.request' && parsed.message.device,
+      ).toEqual(device)
+    })
+
+    it('is optional, so a phone that leaves it out is still understood', () => {
+      const frame = JSON.stringify({
+        type: 'stream.request',
+        size: { width: 1680, height: 1080 },
+        quality: 'full',
+      })
+      expect(parsePhoneMessage(frame).ok).toBe(true)
+    })
+
+    it('rejects a viewport or pixel ratio the layout code could not have produced', () => {
+      const viewport = { width: 892, height: 412 }
+      const bad = [
+        { viewport, devicePixelRatio: 0 },
+        { viewport, devicePixelRatio: 9 },
+        { viewport: { width: 0, height: 412 }, devicePixelRatio: 2 },
+        { viewport: { width: 892.5, height: 412 }, devicePixelRatio: 2 },
+        { viewport: { width: 20_000, height: 412 }, devicePixelRatio: 2 },
+        { viewport },
+        { devicePixelRatio: 2 },
+        'landscape',
+      ]
+      for (const device of bad) {
+        expect(parsePhoneMessage(request(device)).ok, JSON.stringify(device)).toBe(false)
+      }
+    })
   })
 
   it('rejects garbage and oversized frames without throwing', () => {
