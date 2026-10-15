@@ -1,6 +1,6 @@
 //! Decisions the Windows backend makes, kept free of Win32 calls so they are tested on every OS.
 
-use shiftpane_core::mode::{MAX_HEIGHT, MAX_WIDTH, MIN_HEIGHT, MIN_WIDTH};
+use shiftpane_core::mode::{MAX_HEIGHT, MAX_PREPARE_SIZES, MAX_WIDTH, MIN_HEIGHT, MIN_WIDTH};
 
 /// How the driver's adapter is described in Windows (the INF's device description).
 pub const ADAPTER_DESCRIPTION: &str = "Virtual Display Driver";
@@ -8,8 +8,8 @@ pub const ADAPTER_DESCRIPTION: &str = "Virtual Display Driver";
 /// is localised or overridden.
 pub const MONITOR_ID_MARK: &str = "MTT1337";
 
-/// How many sizes one elevated run may add.
-pub const MAX_MODES_PER_CALL: usize = 16;
+/// How many sizes one elevated run may add: everything one `display.prepare` can list.
+pub const MAX_MODES_PER_CALL: usize = MAX_PREPARE_SIZES;
 
 /// Exit codes of the elevated `apply-modes` process. The parent cannot read its output (it
 /// runs through a UAC prompt), so the code is the whole report.
@@ -33,6 +33,20 @@ pub fn is_virtual_display(adapter_description: &str, monitor_id: &str) -> bool {
 pub fn is_driver_hardware_id(id: &str) -> bool {
     let id = id.trim().to_ascii_uppercase();
     id == r"ROOT\MTTVDD" || id == "MTTVDD"
+}
+
+/// The sizes in `wanted` the driver does not list yet, in request order and without
+/// duplicates. `offered` holds `(width, height, refresh)` for every mode the driver reports,
+/// so a size counts as present at any refresh rate.
+pub fn missing_sizes(offered: &[(u32, u32, u32)], wanted: &[(u32, u32)]) -> Vec<(u32, u32)> {
+    let mut missing: Vec<(u32, u32)> = Vec::new();
+    for &size in wanted {
+        let listed = offered.iter().any(|&(w, h, _)| (w, h) == size);
+        if !listed && !missing.contains(&size) {
+            missing.push(size);
+        }
+    }
+    missing
 }
 
 /// The refresh rate to apply: the requested one when the driver offers it for this size,
@@ -130,6 +144,23 @@ mod tests {
         );
         assert_eq!(pick_refresh(&offered, 24), Some(30));
         assert_eq!(pick_refresh(&[], 60), None);
+    }
+
+    #[test]
+    fn finds_the_sizes_the_driver_does_not_list() {
+        // The same size at two refresh rates counts once, and any rate counts as listed.
+        let offered = [(1920, 1080, 30), (1920, 1080, 60), (1440, 1080, 60)];
+        assert_eq!(
+            missing_sizes(
+                &offered,
+                &[(1440, 1080), (1080, 1440), (1920, 1080), (1080, 1440)]
+            ),
+            vec![(1080, 1440)]
+        );
+        assert_eq!(missing_sizes(&offered, &[(1920, 1080)]), Vec::new());
+        assert_eq!(missing_sizes(&[], &[(1440, 1080)]), vec![(1440, 1080)]);
+        // One elevated run is enough for everything a phone can ask for.
+        const { assert!(MAX_MODES_PER_CALL >= 12) };
     }
 
     #[test]

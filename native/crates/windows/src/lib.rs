@@ -7,10 +7,12 @@
 //! How the pieces fit:
 //! - The driver offers a fixed list of resolutions read from `vdd_settings.xml`. Switching to
 //!   a size on that list is an ordinary `ChangeDisplaySettingsExW` call and needs no rights.
-//! - Adding a size means editing the file (under `C:\`) and restarting the driver, which does
+//! - Adding sizes means editing the file (under `C:\`) and restarting the driver, which does
 //!   need administrator rights. The helper does that by starting a copy of itself elevated
-//!   with a fixed numbers-only sub-command ([`elevated`]); the UAC prompt appears once per new
-//!   size and never again for that size.
+//!   with a fixed numbers-only sub-command ([`elevated`]); one prompt adds every size missing
+//!   from the call, and a size is never asked for again once the driver lists it.
+//!   `display.prepare` takes all the sizes a phone can need up front, so a phone costs at most
+//!   one prompt; `display.attach` adds a lone missing size the same way as a fallback.
 //! - Attach finds the driver's display (by adapter, never by `\\.\DISPLAYn`, which changes on
 //!   every driver restart), makes sure the size exists, then switches mode or puts the display
 //!   back on the desktop to the right of the others.
@@ -50,10 +52,16 @@ mod live {
         Err(unsupported())
     }
 
+    pub fn prepare(_sizes: &[(u32, u32)]) -> Result<u32, HelperError> {
+        Err(unsupported())
+    }
+
     pub fn attach(_mode: Mode) -> Result<DisplayInfo, HelperError> {
         Err(unsupported())
     }
 
+    // Same signature as the Windows implementation, which can fail.
+    #[allow(clippy::unnecessary_wraps)]
     pub fn detach() -> Result<(), HelperError> {
         Ok(())
     }
@@ -130,6 +138,11 @@ impl DisplayBackend for VddBackend {
         live::list_displays()
     }
 
+    fn prepare(&mut self, sizes: &[(u32, u32)]) -> Result<u32, HelperError> {
+        self.require_ready()?;
+        live::prepare(sizes)
+    }
+
     fn attach(&mut self, mode: Mode) -> Result<DisplayInfo, HelperError> {
         self.require_ready()?;
         let display = live::attach(mode)?;
@@ -170,6 +183,14 @@ mod tests {
         };
         let err = backend.attach(mode).unwrap_err();
         assert_eq!(err.code, ErrorCode::BackendUnavailable);
+    }
+
+    #[test]
+    fn prepare_without_the_driver_is_backend_unavailable() {
+        let mut backend = VddBackend::new("/definitely/not/here/vdd_settings.xml");
+        let err = backend.prepare(&[(1440, 1080), (1080, 1440)]).unwrap_err();
+        assert_eq!(err.code, ErrorCode::BackendUnavailable);
+        assert!(err.message.contains("winget install"));
     }
 
     #[test]

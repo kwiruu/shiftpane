@@ -20,7 +20,8 @@ Every crate compiles on every OS (platform-only code sits behind `cfg`), so
 | | Windows | macOS | Linux |
 | --- | --- | --- | --- |
 | Readiness check (`helper.hello`) | VDD installed? | `CGVirtualDisplay` present? | Session/compositor detected |
-| `display.list` / `attach` / `detach` | not yet | not yet | not yet |
+| `display.list` / `attach` / `detach` | yes (no `scalePercent`) | not yet | not yet |
+| `display.prepare` | adds missing sizes behind one UAC prompt | nothing to prepare | nothing to prepare |
 
 ## Protocol
 
@@ -28,6 +29,8 @@ Every crate compiles on every OS (platform-only code sits behind `cfg`), so
 // desktop -> helper
 {"id": 1, "method": "helper.hello"}
 {"id": 2, "method": "display.attach", "params": {"width": 1440, "height": 1080, "refreshHz": 60, "scalePercent": 150}}
+// every size a phone can ask for, so Windows asks for administrator approval once, not per size
+{"id": 3, "method": "display.prepare", "params": {"sizes": [{"width": 1440, "height": 1080}, {"width": 1080, "height": 1440}]}}
 // helper -> desktop
 {"kind": "result", "id": 2, "result": {"type": "attached", "display": {"id": "...", "width": 1440, ...}}}
 {"kind": "error", "id": 2, "error": {"code": "backendUnavailable", "message": "..."}}

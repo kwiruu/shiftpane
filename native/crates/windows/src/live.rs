@@ -79,10 +79,37 @@ fn wait_for<T>(timeout: Duration, mut check: impl FnMut() -> Option<T>) -> Optio
     }
 }
 
-fn offers_size(adapter: &Adapter, width: u32, height: u32) -> bool {
-    win32::supported_modes(&adapter.device_name)
-        .iter()
-        .any(|&(w, h, _)| (w, h) == (width, height))
+/// The sizes in `wanted` the driver's current mode list does not contain.
+fn missing_from(adapter: &Adapter, wanted: &[(u32, u32)]) -> Vec<(u32, u32)> {
+    plan::missing_sizes(&win32::supported_modes(&adapter.device_name), wanted)
+}
+
+/// Makes sure the driver offers every size in `wanted`. All the missing ones are added by one
+/// elevated step, so this costs at most one UAC prompt however many sizes are listed. Returns
+/// how many were added.
+fn ensure_sizes(wanted: &[(u32, u32)]) -> Result<u32, HelperError> {
+    let adapter = find_virtual().ok_or_else(driver_missing)?;
+    let missing = missing_from(&adapter, wanted);
+    if missing.is_empty() {
+        return Ok(0);
+    }
+    elevated::add_modes(&missing)?;
+    wait_for(RELOAD_TIMEOUT, || {
+        find_virtual().filter(|a| missing_from(a, &missing).is_empty())
+    })
+    .ok_or_else(|| {
+        let list: Vec<String> = missing.iter().map(|(w, h)| format!("{w}x{h}")).collect();
+        internal(format!(
+            "the driver was restarted but still does not offer {}",
+            list.join(", ")
+        ))
+    })?;
+    Ok(u32::try_from(missing.len()).unwrap_or(u32::MAX))
+}
+
+/// Adds every size the driver does not list yet, without creating or moving the monitor.
+pub fn prepare(sizes: &[(u32, u32)]) -> Result<u32, HelperError> {
+    ensure_sizes(sizes)
 }
 
 pub fn attach(mode: Mode) -> Result<DisplayInfo, HelperError> {
@@ -94,18 +121,8 @@ pub fn attach(mode: Mode) -> Result<DisplayInfo, HelperError> {
     let (width, height) = (mode.width, mode.height);
 
     // 1. Make sure the driver offers this size; adding it is the only step that needs UAC.
-    let adapter = find_virtual().ok_or_else(driver_missing)?;
-    if !offers_size(&adapter, width, height) {
-        elevated::add_modes(&[(width, height)])?;
-        wait_for(RELOAD_TIMEOUT, || {
-            find_virtual().filter(|a| offers_size(a, width, height))
-        })
-        .ok_or_else(|| {
-            internal(format!(
-                "the driver was restarted but still does not offer {width}x{height}"
-            ))
-        })?;
-    }
+    //    `display.prepare` normally did this already, so this is a no-op in the common case.
+    ensure_sizes(&[(width, height)])?;
 
     // 2. The device name may have changed with the restart, so look it up again.
     let adapter = find_virtual().ok_or_else(driver_missing)?;
