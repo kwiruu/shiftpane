@@ -6,8 +6,10 @@
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-/// Bumped on any breaking change to the messages below.
-pub const PROTOCOL_VERSION: u32 = 1;
+/// Bumped on any breaking change to the messages below, and when the desktop app starts
+/// relying on a call an older helper lacks (2: `display.prepare`). The desktop app compares
+/// it with `HELPER_PROTOCOL_VERSION` in `packages/helper-client`.
+pub const PROTOCOL_VERSION: u32 = 2;
 
 /// One line from the desktop app.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS)]
@@ -34,9 +36,32 @@ pub enum Call {
     /// Create the virtual monitor, or resize it if it already exists.
     #[serde(rename = "display.attach")]
     Attach(AttachParams),
+    /// Make sure the OS can switch the virtual monitor to each listed size without asking
+    /// again. On Windows this is the one step that needs administrator approval, so the
+    /// desktop app sends every size a phone can ask for in a single call: one prompt per
+    /// phone instead of one per size. Does not create or move the monitor.
+    #[serde(rename = "display.prepare")]
+    PrepareDisplays(PrepareParams),
     /// Remove the virtual monitor; the OS moves its windows back to the other screens.
     #[serde(rename = "display.detach")]
     Detach,
+}
+
+/// One monitor resolution, in physical pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DisplaySize {
+    pub width: u32,
+    pub height: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct PrepareParams {
+    /// At most [`crate::mode::MAX_PREPARE_SIZES`], each validated like an attach size.
+    pub sizes: Vec<DisplaySize>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, TS)]
@@ -76,8 +101,17 @@ pub enum Message {
 #[ts(export)]
 pub enum CallResult {
     Hello(HelloInfo),
-    Displays { displays: Vec<DisplayInfo> },
-    Attached { display: DisplayInfo },
+    Displays {
+        displays: Vec<DisplayInfo>,
+    },
+    Attached {
+        display: DisplayInfo,
+    },
+    /// How many sizes had to be added to the OS's list. Zero means every size was already
+    /// available and nothing was asked of the user.
+    Prepared {
+        added: u32,
+    },
     Detached,
 }
 
@@ -244,6 +278,51 @@ mod tests {
     }
 
     #[test]
+    fn parses_prepare_with_a_size_list() {
+        let prepare: Request = serde_json::from_value(json!({
+            "id": 4,
+            "method": "display.prepare",
+            "params": {"sizes": [
+                {"width": 1440, "height": 1080},
+                {"width": 1080, "height": 1440}
+            ]}
+        }))
+        .unwrap();
+        assert_eq!(
+            prepare.call,
+            Call::PrepareDisplays(PrepareParams {
+                sizes: vec![
+                    DisplaySize {
+                        width: 1440,
+                        height: 1080
+                    },
+                    DisplaySize {
+                        width: 1080,
+                        height: 1440
+                    },
+                ]
+            })
+        );
+    }
+
+    #[test]
+    fn prepare_takes_numbers_only() {
+        // No field of the schema is a string that could name a program or a path.
+        for params in [
+            json!({"sizes": [{"width": "1440", "height": 1080}]}),
+            json!({"sizes": [{"width": 1440}]}),
+            json!({"sizes": "1440x1080"}),
+            json!({"sizes": [{"width": -1440, "height": 1080}]}),
+            json!({}),
+        ] {
+            let result = serde_json::from_value::<Request>(
+                json!({"id": 1, "method": "display.prepare", "params": params}),
+            );
+            assert!(result.is_err(), "{params}");
+        }
+    }
+
+    #[test]
     fn rejects_unknown_methods() {
         let err = serde_json::from_value::<Request>(
             json!({"id": 3, "method": "shell.exec", "params": "rm -rf /"}),
@@ -260,6 +339,15 @@ mod tests {
         assert_eq!(
             serde_json::to_value(&msg).unwrap(),
             json!({"kind": "result", "id": 7, "result": {"type": "detached"}})
+        );
+
+        let prepared = Message::Result {
+            id: 8,
+            result: CallResult::Prepared { added: 2 },
+        };
+        assert_eq!(
+            serde_json::to_value(&prepared).unwrap(),
+            json!({"kind": "result", "id": 8, "result": {"type": "prepared", "added": 2}})
         );
 
         let err = Message::Error {

@@ -1,18 +1,32 @@
 import { createInterface } from 'node:readline'
 import { PassThrough } from 'node:stream'
 import { describe, expect, it } from 'vitest'
-import { HelperCallError, HelperClient } from './client.ts'
+import { HelperCallError, HelperClient, spawnHelper } from './client.ts'
 import type { Message, Request } from './protocol.ts'
 
 /** A scripted stand-in for the Rust helper, wired to the client through two pipes. */
-function fakeHelper(answer: (request: Request) => Message | null) {
+function fakeHelper(
+  answer: (request: Request) => Message | null,
+  timeouts: { timeoutMs?: number; slowTimeoutMs?: number; replyDelayMs?: number } = {},
+) {
   const toHelper = new PassThrough()
   const fromHelper = new PassThrough()
   createInterface({ input: toHelper }).on('line', (line) => {
     const reply = answer(JSON.parse(line) as Request)
-    if (reply) fromHelper.write(`${JSON.stringify(reply)}\n`)
+    if (!reply) return
+    const send = () => fromHelper.write(`${JSON.stringify(reply)}\n`)
+    if (timeouts.replyDelayMs) setTimeout(send, timeouts.replyDelayMs)
+    else send()
   })
-  return { client: new HelperClient(toHelper, fromHelper, 200), fromHelper }
+  return {
+    client: new HelperClient(
+      toHelper,
+      fromHelper,
+      timeouts.timeoutMs ?? 200,
+      timeouts.slowTimeoutMs,
+    ),
+    fromHelper,
+  }
 }
 
 describe('HelperClient', () => {
@@ -54,6 +68,44 @@ describe('HelperClient', () => {
     expect(result.display.width).toBe(1440)
   })
 
+  it('sends a size list for display.prepare and resolves how many were added', async () => {
+    const seen: Request[] = []
+    const { client } = fakeHelper((request) => {
+      seen.push(request)
+      return { kind: 'result', id: request.id, result: { type: 'prepared', added: 2 } }
+    })
+    const sizes = [
+      { width: 1440, height: 1080 },
+      { width: 1080, height: 1440 },
+    ]
+    await expect(client.call('display.prepare', { sizes })).resolves.toEqual({
+      type: 'prepared',
+      added: 2,
+    })
+    expect(seen).toEqual([{ id: 1, method: 'display.prepare', params: { sizes } }])
+  })
+
+  it('gives calls that can wait on a UAC prompt a longer timeout', async () => {
+    const answer = (request: Request): Message => ({
+      kind: 'result',
+      id: request.id,
+      result:
+        request.method === 'display.prepare'
+          ? { type: 'prepared', added: 1 }
+          : { type: 'detached' },
+    })
+    // The reply takes 120 ms: past the 50 ms default, inside the 400 ms slow timeout.
+    const { client } = fakeHelper(answer, {
+      timeoutMs: 50,
+      slowTimeoutMs: 400,
+      replyDelayMs: 120,
+    })
+    await expect(
+      client.call('display.prepare', { sizes: [{ width: 1440, height: 1080 }] }),
+    ).resolves.toEqual({ type: 'prepared', added: 1 })
+    await expect(client.call('display.detach')).rejects.toThrow(/did not answer display.detach/)
+  })
+
   it('rejects with the helper error', async () => {
     const { client } = fakeHelper((request) => ({
       kind: 'error',
@@ -76,6 +128,18 @@ describe('HelperClient', () => {
     fromHelper.end()
     await expect(pending).rejects.toThrow(/exited/)
     await expect(client.call('helper.hello')).rejects.toThrow(/not running/)
+  })
+
+  it('reports a missing binary instead of throwing, and fails calls', async () => {
+    const errors: Error[] = []
+    const { client } = spawnHelper('/definitely/not/here/shiftpane-helper', {
+      onError: (error) => errors.push(error),
+      timeoutMs: 500,
+    })
+    // Fails because the helper is gone, well before the 500 ms timeout would have.
+    await expect(client.call('helper.hello')).rejects.toThrow(/exited|not running/)
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toMatchObject({ code: 'ENOENT' })
   })
 
   it('emits events and reports unmatched lines without throwing', async () => {

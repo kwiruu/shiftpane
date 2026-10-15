@@ -14,6 +14,17 @@ pub trait DisplayBackend {
 
     fn list_displays(&self) -> Result<Vec<DisplayInfo>, HelperError>;
 
+    /// Makes sure every `(width, height)` in `sizes` can be switched to without further
+    /// approval from the user, and returns how many had to be added (0 = nothing was asked).
+    ///
+    /// The sizes are already validated and unique. Backends that can create any size on demand
+    /// have nothing to do, which is what the default says; Windows adds sizes to the driver's
+    /// list behind a single UAC prompt.
+    fn prepare(&mut self, sizes: &[(u32, u32)]) -> Result<u32, HelperError> {
+        let _ = sizes;
+        Ok(0)
+    }
+
     /// Creates the virtual monitor at `mode`, or resizes the existing one.
     fn attach(&mut self, mode: Mode) -> Result<DisplayInfo, HelperError>;
 
@@ -46,6 +57,10 @@ impl DisplayBackend for UnsupportedBackend {
     }
 
     fn list_displays(&self) -> Result<Vec<DisplayInfo>, HelperError> {
+        Err(HelperError::unsupported(self.reason.clone()))
+    }
+
+    fn prepare(&mut self, _sizes: &[(u32, u32)]) -> Result<u32, HelperError> {
         Err(HelperError::unsupported(self.reason.clone()))
     }
 

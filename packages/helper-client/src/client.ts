@@ -20,9 +20,19 @@ interface ResultTypes {
   'helper.hello': 'hello'
   'display.list': 'displays'
   'display.attach': 'attached'
+  'display.prepare': 'prepared'
   'display.detach': 'detached'
 }
 export type ResultOf<M extends Method> = Extract<CallResult, { type: ResultTypes[M] }>
+
+/**
+ * Calls that may sit behind a UAC prompt (Windows adds missing sizes to the driver through an
+ * elevated step) and a driver restart, so they get the longer timeout.
+ */
+const SLOW_METHODS: ReadonlySet<Method> = new Set<Method>(['display.attach', 'display.prepare'])
+
+/** The helper waits up to 120 s for the prompt, then up to 20 s for the driver to reload. */
+export const DEFAULT_SLOW_TIMEOUT_MS = 150_000
 
 export class HelperCallError extends Error {
   override readonly name = 'HelperCallError'
@@ -50,14 +60,24 @@ export interface HelperClientEvents {
 export class HelperClient extends EventEmitter<HelperClientEvents> {
   readonly #input: Writable
   readonly #timeoutMs: number
+  readonly #slowTimeoutMs: number
   #nextId = 1
   #pending = new Map<number, Pending>()
   #closed = false
 
-  constructor(input: Writable, output: Readable, timeoutMs = 10_000) {
+  constructor(
+    input: Writable,
+    output: Readable,
+    timeoutMs = 10_000,
+    slowTimeoutMs = DEFAULT_SLOW_TIMEOUT_MS,
+  ) {
     super()
     this.#input = input
     this.#timeoutMs = timeoutMs
+    this.#slowTimeoutMs = slowTimeoutMs
+    // A helper that dies between our check and our write makes stdin emit EPIPE. The pending
+    // calls are failed by the stdout close that follows, so the error itself carries nothing.
+    input.on('error', () => {})
     const lines = createInterface({ input: output, crlfDelay: Number.POSITIVE_INFINITY })
     lines.on('line', (line) => this.#onLine(line))
     lines.on('close', () => this.#onClose())
@@ -67,11 +87,12 @@ export class HelperClient extends EventEmitter<HelperClientEvents> {
     if (this.#closed) return Promise.reject(new Error('helper is not running'))
     const id = this.#nextId++
     const request = params.length > 0 ? { id, method, params: params[0] } : { id, method }
+    const timeoutMs = SLOW_METHODS.has(method) ? this.#slowTimeoutMs : this.#timeoutMs
     return new Promise<CallResult>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#pending.delete(id)
-        reject(new Error(`helper did not answer ${method} within ${this.#timeoutMs} ms`))
-      }, this.#timeoutMs)
+        reject(new Error(`helper did not answer ${method} within ${timeoutMs} ms`))
+      }, timeoutMs)
       this.#pending.set(id, { resolve, reject, timer })
       this.#input.write(`${JSON.stringify(request)}\n`)
     }) as Promise<ResultOf<M>>
@@ -128,17 +149,35 @@ export class HelperClient extends EventEmitter<HelperClientEvents> {
   }
 }
 
-/** Spawns the helper binary and returns a client bound to it. stderr is forwarded to `onLog`. */
+export interface SpawnHelperOptions {
+  /** One line of the helper's stderr (its log). */
+  onLog?: (line: string) => void
+  /**
+   * The process could not be started (missing file, no permission). The client then closes
+   * on its own, failing pending calls; without a listener Node would throw the error.
+   */
+  onError?: (error: Error) => void
+  env?: NodeJS.ProcessEnv
+  /** Per-call timeouts, see {@link HelperClient}. */
+  timeoutMs?: number
+  slowTimeoutMs?: number
+}
+
+/** Spawns the helper binary and returns a client bound to it. */
 export function spawnHelper(
   binaryPath: string,
-  options: { onLog?: (line: string) => void; env?: NodeJS.ProcessEnv } = {},
+  options: SpawnHelperOptions = {},
 ): { client: HelperClient; process: ChildProcess } {
   const child = spawn(binaryPath, ['serve'], {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: options.env,
     windowsHide: true,
   })
-  const { onLog } = options
+  const { onLog, onError } = options
+  child.on('error', (error) => onError?.(error))
   if (onLog) createInterface({ input: child.stderr }).on('line', onLog)
-  return { client: new HelperClient(child.stdin, child.stdout), process: child }
+  return {
+    client: new HelperClient(child.stdin, child.stdout, options.timeoutMs, options.slowTimeoutMs),
+    process: child,
+  }
 }

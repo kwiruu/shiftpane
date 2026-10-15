@@ -2,4 +2,4 @@
 import type { DisplayInfo } from "./DisplayInfo";
 import type { HelloInfo } from "./HelloInfo";
 
-export type CallResult = { "type": "hello" } & HelloInfo | { "type": "displays", displays: Array<DisplayInfo>, } | { "type": "attached", display: DisplayInfo, } | { "type": "detached" };
+export type CallResult = { "type": "hello" } & HelloInfo | { "type": "displays", displays: Array<DisplayInfo>, } | { "type": "attached", display: DisplayInfo, } | { "type": "prepared", added: number, } | { "type": "detached" };

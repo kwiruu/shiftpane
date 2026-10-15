@@ -3,7 +3,7 @@
 use std::io::{self, BufRead, Write};
 
 use crate::backend::DisplayBackend;
-use crate::mode::Mode;
+use crate::mode::{self, Mode};
 use crate::protocol::{
     Call, CallResult, ErrorCode, HelloInfo, HelperError, Message, PROTOCOL_VERSION, Platform,
     Request,
@@ -11,6 +11,10 @@ use crate::protocol::{
 
 /// Requests longer than this are rejected without being parsed.
 const MAX_LINE_BYTES: usize = 64 * 1024;
+
+/// Some writers put a UTF-8 byte order mark before the first line (.NET's `Process` does when
+/// it opens a redirected stdin); it is not part of the JSON and would fail to parse.
+const BYTE_ORDER_MARK: char = '\u{feff}';
 
 /// Serves requests until `input` reaches end of file, which is how the desktop app asks the
 /// helper to exit. The virtual monitor is detached on the way out.
@@ -21,10 +25,11 @@ pub fn serve<R: BufRead, W: Write>(
 ) -> io::Result<()> {
     for line in input.lines() {
         let line = line?;
+        let line = line.strip_prefix(BYTE_ORDER_MARK).unwrap_or(&line);
         if line.trim().is_empty() {
             continue;
         }
-        let reply = handle_line(&line, backend);
+        let reply = handle_line(line, backend);
         serde_json::to_writer(&mut output, &reply)?;
         output.write_all(b"\n")?;
         output.flush()?;
@@ -86,6 +91,12 @@ fn dispatch(call: &Call, backend: &mut dyn DisplayBackend) -> Result<CallResult,
                 .attach(mode)
                 .map(|display| CallResult::Attached { display })
         }
+        Call::PrepareDisplays(params) => {
+            let sizes = mode::prepare_sizes(params)?;
+            backend
+                .prepare(&sizes)
+                .map(|added| CallResult::Prepared { added })
+        }
         Call::Detach => backend.detach().map(|()| CallResult::Detached),
     }
 }
@@ -101,6 +112,7 @@ mod tests {
     #[derive(Default)]
     struct FakeBackend {
         attached: Option<Mode>,
+        prepared: Vec<Vec<(u32, u32)>>,
         detach_calls: u32,
     }
 
@@ -115,6 +127,10 @@ mod tests {
         }
         fn list_displays(&self) -> Result<Vec<DisplayInfo>, HelperError> {
             Ok(vec![])
+        }
+        fn prepare(&mut self, sizes: &[(u32, u32)]) -> Result<u32, HelperError> {
+            self.prepared.push(sizes.to_vec());
+            Ok(u32::try_from(sizes.len()).unwrap())
         }
         fn attach(&mut self, mode: Mode) -> Result<DisplayInfo, HelperError> {
             self.attached = Some(mode);
@@ -181,6 +197,68 @@ mod tests {
             matches!(reply, Message::Error { id: Some(5), ref error } if error.code == ErrorCode::InvalidParams)
         );
         assert!(backend.attached.is_none());
+    }
+
+    #[test]
+    fn prepare_reaches_the_backend_once_with_validated_unique_sizes() {
+        let mut backend = FakeBackend::default();
+        let reply = handle_line(
+            r#"{"id":6,"method":"display.prepare","params":{"sizes":[{"width":1440,"height":1080},{"width":1080,"height":1440},{"width":1440,"height":1080}]}}"#,
+            &mut backend,
+        );
+        assert_eq!(
+            reply,
+            Message::Result {
+                id: 6,
+                result: CallResult::Prepared { added: 2 }
+            }
+        );
+        assert_eq!(backend.prepared, vec![vec![(1440, 1080), (1080, 1440)]]);
+    }
+
+    #[test]
+    fn invalid_prepare_never_reaches_the_backend() {
+        let mut backend = FakeBackend::default();
+        for line in [
+            r#"{"id":7,"method":"display.prepare","params":{"sizes":[]}}"#,
+            r#"{"id":7,"method":"display.prepare","params":{"sizes":[{"width":1441,"height":1080}]}}"#,
+        ] {
+            let reply = handle_line(line, &mut backend);
+            assert!(
+                matches!(reply, Message::Error { id: Some(7), ref error } if error.code == ErrorCode::InvalidParams),
+                "{line}"
+            );
+        }
+        assert_eq!(backend.prepared.len(), 0, "nothing may reach the backend");
+    }
+
+    #[test]
+    fn unsupported_backend_refuses_prepare() {
+        let mut backend = UnsupportedBackend::new("no virtual display support on this OS");
+        let replies = run(
+            "{\"id\":1,\"method\":\"display.prepare\",\"params\":{\"sizes\":[{\"width\":1440,\"height\":1080}]}}\n",
+            &mut backend,
+        );
+        assert_eq!(replies[0]["error"]["code"], json!("unsupported"));
+    }
+
+    #[test]
+    fn tolerates_a_leading_byte_order_mark() {
+        // .NET's Process writes EF BB BF before the first line of a redirected stdin.
+        let mut backend = FakeBackend::default();
+        let replies = run(
+            "\u{feff}{\"id\":1,\"method\":\"helper.hello\"}\n{\"id\":2,\"method\":\"helper.hello\"}\n",
+            &mut backend,
+        );
+        assert_eq!(replies.len(), 2);
+        assert_eq!(replies[0]["kind"], json!("result"));
+        assert_eq!(replies[0]["id"], json!(1));
+        // A BOM alone on its line is blank, not a parse error.
+        let replies = run(
+            "\u{feff}\n{\"id\":3,\"method\":\"helper.hello\"}\n",
+            &mut backend,
+        );
+        assert_eq!(replies.len(), 1);
     }
 
     #[test]
