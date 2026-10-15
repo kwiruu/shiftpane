@@ -78,6 +78,27 @@ export class StreamReceiver {
     }
   }
 
+  /**
+   * Opens and drops a throwaway connection, so the browser's one-time network discovery is not
+   * paid for by the first offer, which the user is waiting on.
+   */
+  warmUp(): void {
+    try {
+      const began = Date.now()
+      const warm = this.#options.createPeerConnection({ iceServers: [] })
+      this.#options.log?.(`warm-up: connection created in ${Date.now() - began} ms`)
+      warm.createDataChannel('warm-up')
+      void warm
+        .createOffer()
+        .then((offer) => warm.setLocalDescription(offer))
+        .then(() => this.#options.log?.(`warm-up: offer ready in ${Date.now() - began} ms`))
+        .catch(() => {})
+      setTimeout(() => warm.close(), 5_000)
+    } catch {
+      // Not worth failing for; the first real offer just takes longer.
+    }
+  }
+
   /** The connection to the PC was lost. */
   reset(): void {
     if (this.#current === null && this.#state === IDLE) return

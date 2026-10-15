@@ -1,5 +1,5 @@
 import type { PcMessage, PhoneMessage } from '@shiftpane/protocol'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { StreamReceiver } from './stream.ts'
 
 class FakeReceiver {
@@ -27,6 +27,13 @@ class FakePeer {
     this.order.push('setRemoteDescription')
     if (this.failSetRemote) throw new Error('bad sdp')
     this.remoteDescription = description
+  }
+  readonly channels: string[] = []
+  createDataChannel(label: string) {
+    this.channels.push(label)
+  }
+  async createOffer() {
+    return { type: 'offer', sdp: 'v=0 offer' }
   }
   async createAnswer() {
     return { type: 'answer', sdp: 'v=0 answer' }
@@ -269,6 +276,25 @@ describe('StreamReceiver', () => {
     await t.handle(offer(1))
     await t.handle({ type: 'error', code: 'bad-message', message: 'nope' })
     expect(t.receiver.getState().phase).toBe('connecting')
+  })
+
+  it('warms the browser up with a connection it drops again, without changing its state', async () => {
+    vi.useFakeTimers()
+    try {
+      const t = setup()
+      const before = t.receiver.getState()
+      t.receiver.warmUp()
+      expect(t.peers).toHaveLength(1)
+      expect(t.peers[0]?.channels).toEqual(['warm-up'])
+      await vi.advanceTimersByTimeAsync(0)
+      expect(t.peers[0]?.localDescription).toEqual({ type: 'offer', sdp: 'v=0 offer' })
+      expect(t.receiver.getState()).toBe(before)
+      expect(t.sent).toEqual([])
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(t.peers[0]?.closed).toBe(true)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('notifies subscribers on every change', async () => {

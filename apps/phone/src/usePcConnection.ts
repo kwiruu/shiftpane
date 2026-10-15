@@ -29,8 +29,17 @@ const receiver = new StreamReceiver({
   createPeerConnection: (configuration) => new RTCPeerConnection(configuration),
   log: (message) => console.info(`[stream] ${message}`),
 })
+// Once the PC has welcomed this phone, warm the browser's WebRTC stack up. Its first connection
+// blocks the page for a moment, so it waits until the first stream request has gone out and the
+// PC is busy preparing its offer; the answer is then not also waiting on that start-up.
+let warmedUp = false
 connection.subscribe(() => {
-  if (connection.getState().status !== 'connected') receiver.reset()
+  if (connection.getState().status !== 'connected') {
+    receiver.reset()
+  } else if (!warmedUp) {
+    warmedUp = true
+    setTimeout(() => receiver.warmUp(), 350)
+  }
 })
 
 export function usePcConnection(): ConnectionState {
