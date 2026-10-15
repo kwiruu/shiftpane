@@ -7,6 +7,7 @@ import {
   takePairingToken,
   websocketUrl,
 } from './connection.ts'
+import { StreamReceiver, type StreamState } from './stream.ts'
 
 // One connection per page; created at import so the token is stripped from the URL immediately.
 const connection = new PcConnection({
@@ -18,6 +19,18 @@ const connection = new PcConnection({
     devicePixelRatio: window.devicePixelRatio,
     touch: navigator.maxTouchPoints > 0,
   }),
+  onMessage: (message) => receiver.handle(message),
+})
+
+// The PC's video for this connection. The PC forgets the phone when the socket drops and offers
+// again once the phone has reconnected and asked for its monitor, so a drop just starts over.
+const receiver = new StreamReceiver({
+  send: (message) => connection.send(message),
+  createPeerConnection: (configuration) => new RTCPeerConnection(configuration),
+  log: (message) => console.info(`[stream] ${message}`),
+})
+connection.subscribe(() => {
+  if (connection.getState().status !== 'connected') receiver.reset()
 })
 
 export function usePcConnection(): ConnectionState {
@@ -25,6 +38,11 @@ export function usePcConnection(): ConnectionState {
     connection.start()
   }, [])
   return useSyncExternalStore(connection.subscribe, connection.getState)
+}
+
+/** The PC's monitor video, as far as it has got. */
+export function usePcStream(): StreamState {
+  return useSyncExternalStore(receiver.subscribe, receiver.getState)
 }
 
 /** Sends one message to the PC; false when the socket is not connected right now. */

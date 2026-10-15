@@ -1,6 +1,7 @@
 import { computeSplit, type Rect, SPLIT_PRESETS, type SplitPreset } from '@shiftpane/layout'
 import { useState } from 'react'
-import { describeConnection, usePcConnection } from './usePcConnection.ts'
+import { MonitorView } from './MonitorView.tsx'
+import { describeConnection, usePcConnection, usePcStream } from './usePcConnection.ts'
 import { useStreamRequest } from './useStreamRequest.ts'
 import { useViewport } from './useViewport.ts'
 
@@ -16,14 +17,16 @@ const PRESET_LABELS: Record<SplitPreset, string> = {
 }
 
 /**
- * Placeholder shell: shows the connection to the PC and what monitor the current split
- * would ask it for. The stream player and widget panel replace the two panes.
+ * Shell: the PC's monitor in the monitor area, and the connection status and split picker in
+ * the panel. The widget panel replaces the second pane.
  */
 export function App() {
   const viewport = useViewport()
   const [preset, setPreset] = useState<SplitPreset>('70-30')
   const connection = usePcConnection()
+  const stream = usePcStream()
   const status = describeConnection(connection)
+  const displayAvailable = connection.status === 'connected' && connection.welcome.features.display
   const layout = computeSplit({
     viewport,
     devicePixelRatio: viewport.devicePixelRatio,
@@ -31,26 +34,17 @@ export function App() {
   })
   // The PC's virtual monitor follows the split: it appears at the monitor area's size and goes
   // away on the widgets-only split.
-  useStreamRequest(
-    layout.stream,
-    viewport,
-    connection.status === 'connected' && connection.welcome.features.display,
-  )
+  useStreamRequest(layout.stream, viewport, displayAvailable)
 
   return (
     <main className="relative h-full overflow-hidden bg-surface-sunken text-ink">
       <section
         aria-label="Monitor"
         style={placeAt(layout.monitor)}
-        className="absolute grid place-items-center border-border border-r border-b bg-surface p-4 text-center"
+        className="absolute overflow-hidden border-border border-r border-b bg-surface"
       >
         {layout.stream && (
-          <div>
-            <p className="font-mono text-3xl text-accent tabular-nums">
-              {layout.stream.width}×{layout.stream.height}
-            </p>
-            <p className="mt-1 text-ink-muted text-sm">monitor size for this split</p>
-          </div>
+          <MonitorView state={stream} wanted={layout.stream} available={displayAvailable} />
         )}
       </section>
 
