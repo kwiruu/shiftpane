@@ -13,6 +13,8 @@ use std::mem::{size_of, zeroed};
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
 use std::ptr::{null, null_mut};
+use std::thread::sleep;
+use std::time::{Duration, Instant};
 
 use shiftpane_core::protocol::{ErrorCode, HelperError};
 use windows_sys::Win32::Devices::DeviceAndDriverInstallation::{
@@ -31,7 +33,7 @@ use windows_sys::core::GUID;
 
 use crate::DEFAULT_SETTINGS_PATH;
 use crate::plan::{self, exit};
-use crate::settings;
+use crate::{settings, win32};
 
 /// How long to wait for the user to answer the UAC prompt and the driver to restart.
 const ELEVATED_STEP_TIMEOUT_MS: u32 = 120_000;
@@ -121,40 +123,95 @@ pub fn add_modes(sizes: &[(u32, u32)]) -> Result<(), HelperError> {
         exit::RESTART_FAILED => Err(internal(
             "the Virtual Display Driver could not be restarted",
         )),
+        exit::REJECTED => Err(internal(
+            "the Virtual Display Driver did not accept the new size list, so the previous list \
+             was put back and nothing changed",
+        )),
+        exit::TOO_MANY => Err(HelperError::invalid_params(format!(
+            "the driver's size list holds at most {} sizes",
+            plan::MAX_LISTED_RESOLUTIONS
+        ))),
         other => Err(internal(format!(
             "the elevated step failed with code {other}"
         ))),
     }
 }
 
+/// How long the elevated copy waits for the restarted driver to offer the new sizes.
+const VERIFY_TIMEOUT: Duration = Duration::from_secs(25);
+
 /// Entry point of the elevated copy. Returns the process exit code.
+///
+/// The driver gives no error when it dislikes a size list: the monitor just disappears. So the
+/// new list is checked after the restart, and the old one is put back if the monitor does not
+/// come back offering the new sizes.
 pub fn run(args: &[String]) -> i32 {
     let Ok(sizes) = plan::parse_mode_args(args) else {
         return exit::BAD_ARGS;
     };
-    if update_settings(Path::new(DEFAULT_SETTINGS_PATH), &sizes).is_err() {
+    let path = Path::new(DEFAULT_SETTINGS_PATH);
+    let Ok(before) = fs::read_to_string(path) else {
+        return exit::SETTINGS;
+    };
+    let Ok(updated) = settings::with_modes(&before, &sizes) else {
+        return exit::SETTINGS;
+    };
+    if updated.is_some() {
+        let listed = settings::listed_resolutions(&before);
+        if plan::list_len_after(&listed, &sizes) > plan::MAX_LISTED_RESOLUTIONS {
+            return exit::TOO_MANY;
+        }
+    }
+    if let Some(new_xml) = &updated
+        && write_atomic(path, new_xml).is_err()
+    {
         return exit::SETTINGS;
     }
+
     // Always restart, even when the file already had the sizes: the caller only gets here
     // because the running driver does not offer them, e.g. after an earlier restart failed.
-    match restart_driver() {
-        Ok(()) => exit::OK,
+    let restarted = restart_driver();
+    if restarted.is_ok() && driver_offers(&sizes) {
+        return exit::OK;
+    }
+
+    // Put the old list back so the monitor returns instead of staying missing.
+    if updated.is_some() && write_atomic(path, &before).is_ok() {
+        let _ = restart_driver();
+    }
+    match restarted {
+        Ok(()) => exit::REJECTED,
         Err(code) => code,
     }
 }
 
-fn update_settings(path: &Path, sizes: &[(u32, u32)]) -> Result<(), String> {
-    let xml = fs::read_to_string(path).map_err(|e| e.to_string())?;
-    let Some(updated) = settings::with_modes(&xml, sizes).map_err(|e| e.to_string())? else {
-        return Ok(());
-    };
-    // Write beside the file and rename so the driver never sees a half-written list.
+/// Writes beside the file and renames, so the driver never reads a half-written list.
+fn write_atomic(path: &Path, contents: &str) -> Result<(), String> {
     let temp = path.with_extension("xml.shiftpane-tmp");
-    fs::write(&temp, updated).map_err(|e| e.to_string())?;
+    fs::write(&temp, contents).map_err(|e| e.to_string())?;
     fs::rename(&temp, path).map_err(|e| {
         let _ = fs::remove_file(&temp);
         e.to_string()
     })
+}
+
+/// Waits for the virtual monitor to be present and offering every size in `wanted`.
+fn driver_offers(wanted: &[(u32, u32)]) -> bool {
+    let deadline = Instant::now() + VERIFY_TIMEOUT;
+    loop {
+        let offered = win32::adapters()
+            .into_iter()
+            .find(|a| plan::is_virtual_display(&a.description, &a.monitor_id))
+            .map(|a| win32::supported_modes(&a.device_name))
+            .unwrap_or_default();
+        if !offered.is_empty() && plan::missing_sizes(&offered, wanted).is_empty() {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        sleep(Duration::from_millis(300));
+    }
 }
 
 /// Restarts the Virtual Display Driver's device node so it re-reads `vdd_settings.xml`.

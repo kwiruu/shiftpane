@@ -11,6 +11,12 @@ pub const MONITOR_ID_MARK: &str = "MTT1337";
 /// How many sizes one elevated run may add: everything one `display.prepare` can list.
 pub const MAX_MODES_PER_CALL: usize = MAX_PREPARE_SIZES;
 
+/// The most resolutions the driver's list can hold. Measured on Virtual Display Driver 25.7.26
+/// with its six stock refresh rates: 14 resolutions (98 modes) load, 15 (105 modes) leave the
+/// monitor with no modes at all and no error, and the monitor vanishes from Windows until the
+/// list is shortened. Nothing here may push the list past this line.
+pub const MAX_LISTED_RESOLUTIONS: usize = 14;
+
 /// Exit codes of the elevated `apply-modes` process. The parent cannot read its output (it
 /// runs through a UAC prompt), so the code is the whole report.
 pub mod exit {
@@ -19,6 +25,21 @@ pub mod exit {
     pub const SETTINGS: i32 = 3;
     pub const NO_DEVICE: i32 = 4;
     pub const RESTART_FAILED: i32 = 5;
+    /// The driver restarted but did not offer the new sizes; the old list was put back.
+    pub const REJECTED: i32 = 6;
+    /// Adding the sizes would make the list longer than [`super::MAX_LISTED_RESOLUTIONS`].
+    pub const TOO_MANY: i32 = 7;
+}
+
+/// How many distinct sizes the list would hold after adding `wanted` to `listed`.
+pub fn list_len_after(listed: &[(u32, u32)], wanted: &[(u32, u32)]) -> usize {
+    let mut all: Vec<(u32, u32)> = Vec::with_capacity(listed.len() + wanted.len());
+    for &size in listed.iter().chain(wanted) {
+        if !all.contains(&size) {
+            all.push(size);
+        }
+    }
+    all.len()
 }
 
 /// True for the display this backend drives, as opposed to the user's real monitors.
@@ -130,6 +151,27 @@ mod tests {
         assert!(is_driver_hardware_id("MttVDD"));
         assert!(!is_driver_hardware_id(r"PCI\VEN_8086&DEV_9A49"));
         assert!(!is_driver_hardware_id(r"Root\IddSampleDriver"));
+    }
+
+    #[test]
+    fn counts_the_list_length_after_adding_sizes() {
+        let listed = [(800, 600), (1920, 1080)];
+        assert_eq!(list_len_after(&listed, &[]), 2);
+        assert_eq!(
+            list_len_after(&listed, &[(1920, 1080)]),
+            2,
+            "already listed"
+        );
+        assert_eq!(
+            list_len_after(&listed, &[(1440, 1080), (1440, 1080), (1280, 720)]),
+            4,
+            "duplicates in the request count once"
+        );
+        let full: Vec<(u32, u32)> = (0..MAX_LISTED_RESOLUTIONS)
+            .map(|i| (800 + u32::try_from(i).unwrap_or(0) * 2, 600))
+            .collect();
+        assert_eq!(list_len_after(&full, &[]), MAX_LISTED_RESOLUTIONS);
+        assert!(list_len_after(&full, &[(1000, 1000)]) > MAX_LISTED_RESOLUTIONS);
     }
 
     #[test]

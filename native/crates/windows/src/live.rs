@@ -2,6 +2,7 @@
 //! the real machine, built from the safe wrappers in [`crate::win32`] and the one elevated
 //! step in [`crate::elevated`].
 
+use std::fs;
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 
@@ -9,7 +10,7 @@ use shiftpane_core::Mode;
 use shiftpane_core::protocol::{DisplayInfo, ErrorCode, HelperError};
 
 use crate::win32::{self, Adapter, CurrentMode};
-use crate::{elevated, plan};
+use crate::{DEFAULT_SETTINGS_PATH, elevated, plan, settings};
 
 /// After restarting the driver, how long to wait for it to list the new size.
 const RELOAD_TIMEOUT: Duration = Duration::from_secs(20);
@@ -93,11 +94,28 @@ fn ensure_sizes(wanted: &[(u32, u32)]) -> Result<u32, HelperError> {
     if missing.is_empty() {
         return Ok(0);
     }
+
+    // The driver loses its monitor when its list is too long, so refuse before asking for
+    // administrator approval rather than after.
+    let listed = fs::read_to_string(DEFAULT_SETTINGS_PATH)
+        .map(|xml| settings::listed_resolutions(&xml))
+        .unwrap_or_default();
+    if plan::list_len_after(&listed, &missing) > plan::MAX_LISTED_RESOLUTIONS {
+        return Err(HelperError::invalid_params(format!(
+            "the driver's size list holds at most {} sizes and already has {}",
+            plan::MAX_LISTED_RESOLUTIONS,
+            listed.len()
+        )));
+    }
+
     elevated::add_modes(&missing)?;
     wait_for(RELOAD_TIMEOUT, || {
         find_virtual().filter(|a| missing_from(a, &missing).is_empty())
     })
     .ok_or_else(|| {
+        if find_virtual().is_none() {
+            return internal("the virtual monitor did not come back after the driver restarted");
+        }
         let list: Vec<String> = missing.iter().map(|(w, h)| format!("{w}x{h}")).collect();
         internal(format!(
             "the driver was restarted but still does not offer {}",
