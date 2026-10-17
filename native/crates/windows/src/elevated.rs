@@ -201,7 +201,7 @@ fn driver_offers(wanted: &[(u32, u32)]) -> bool {
     loop {
         let offered = win32::adapters()
             .into_iter()
-            .find(|a| plan::is_virtual_display(&a.description, &a.monitor_id))
+            .find(|a| plan::is_virtual_display(&a.description, &a.device_id))
             .map(|a| win32::supported_modes(&a.device_name))
             .unwrap_or_default();
         if !offered.is_empty() && plan::missing_sizes(&offered, wanted).is_empty() {

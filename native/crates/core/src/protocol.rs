@@ -7,9 +7,10 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 /// Bumped on any breaking change to the messages below, and when the desktop app starts
-/// relying on a call an older helper lacks (2: `display.prepare`). The desktop app compares
-/// it with `HELPER_PROTOCOL_VERSION` in `packages/helper-client`.
-pub const PROTOCOL_VERSION: u32 = 2;
+/// relying on a call an older helper lacks (2: `display.prepare`; 3: `system.stats`,
+/// `media.state`, `media.control`). The desktop app compares it with
+/// `HELPER_PROTOCOL_VERSION` in `packages/helper-client`.
+pub const PROTOCOL_VERSION: u32 = 3;
 
 /// One line from the desktop app.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS)]
@@ -45,6 +46,89 @@ pub enum Call {
     /// Remove the virtual monitor; the OS moves its windows back to the other screens.
     #[serde(rename = "display.detach")]
     Detach,
+    /// CPU, memory, GPU and network load, for the PC stats widget. Rates are measured since
+    /// the previous call, so the first call after the helper starts may report them as null.
+    #[serde(rename = "system.stats")]
+    SystemStats,
+    /// What the OS media controls say is playing.
+    #[serde(rename = "media.state")]
+    MediaState,
+    /// Presses one of the OS media buttons on whatever is playing.
+    #[serde(rename = "media.control")]
+    MediaControl(MediaControlParams),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MediaControlParams {
+    pub action: MediaAction,
+}
+
+/// The fixed set of media buttons. There is no free-form command.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, TS)]
+#[serde(rename_all = "kebab-case")]
+#[ts(export)]
+pub enum MediaAction {
+    PlayPause,
+    Next,
+    Previous,
+}
+
+/// Load of the PC. Each field is `None` when this OS or machine cannot report it.
+/// Byte counts are `f64` so they reach TypeScript as plain numbers.
+#[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct SystemStats {
+    /// 0-100, the share of processor capacity in use (what Task Manager shows).
+    pub cpu_percent: Option<f64>,
+    pub memory_used_bytes: Option<f64>,
+    pub memory_total_bytes: Option<f64>,
+    /// 0-100, the busiest GPU's 3D engine load.
+    pub gpu_percent: Option<f64>,
+    pub network_received_per_second: Option<f64>,
+    pub network_sent_per_second: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub enum MediaStatus {
+    Playing,
+    Paused,
+    Stopped,
+    /// No app is reporting media to the OS.
+    None,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct MediaState {
+    pub status: MediaStatus,
+    pub title: Option<String>,
+    pub artist: Option<String>,
+    /// The app that is playing, e.g. "Spotify".
+    pub app: Option<String>,
+    pub can_play_pause: bool,
+    pub can_next: bool,
+    pub can_previous: bool,
+}
+
+impl MediaState {
+    /// Nothing is playing.
+    pub fn none() -> Self {
+        Self {
+            status: MediaStatus::None,
+            title: None,
+            artist: None,
+            app: None,
+            can_play_pause: false,
+            can_next: false,
+            can_previous: false,
+        }
+    }
 }
 
 /// One monitor resolution, in physical pixels.
@@ -113,6 +197,9 @@ pub enum CallResult {
         added: u32,
     },
     Detached,
+    SystemStats(SystemStats),
+    Media(MediaState),
+    MediaControlled,
 }
 
 /// Pushed by the helper without a request, e.g. when the user unplugs or rearranges monitors.
@@ -320,6 +407,58 @@ mod tests {
             );
             assert!(result.is_err(), "{params}");
         }
+    }
+
+    #[test]
+    fn parses_media_buttons_and_nothing_else() {
+        let press: Request = serde_json::from_value(json!({
+            "id": 4,
+            "method": "media.control",
+            "params": {"action": "play-pause"}
+        }))
+        .unwrap();
+        assert_eq!(
+            press.call,
+            Call::MediaControl(MediaControlParams {
+                action: MediaAction::PlayPause
+            })
+        );
+        for action in ["shutdown", "volume-up", "PlayPause", ""] {
+            let bad = serde_json::from_value::<Request>(json!({
+                "id": 5,
+                "method": "media.control",
+                "params": {"action": action}
+            }));
+            assert!(bad.is_err(), "{action}");
+        }
+    }
+
+    #[test]
+    fn serializes_stats_and_media_results_flat() {
+        let stats = CallResult::SystemStats(SystemStats {
+            cpu_percent: Some(12.5),
+            memory_used_bytes: Some(8.0e9),
+            memory_total_bytes: Some(16.0e9),
+            gpu_percent: None,
+            network_received_per_second: Some(1000.0),
+            network_sent_per_second: Some(10.0),
+        });
+        assert_eq!(
+            serde_json::to_value(&stats).unwrap(),
+            json!({
+                "type": "systemStats",
+                "cpuPercent": 12.5,
+                "memoryUsedBytes": 8.0e9,
+                "memoryTotalBytes": 16.0e9,
+                "gpuPercent": null,
+                "networkReceivedPerSecond": 1000.0,
+                "networkSentPerSecond": 10.0
+            })
+        );
+        assert_eq!(
+            serde_json::to_value(CallResult::Media(MediaState::none())).unwrap()["status"],
+            json!("none")
+        );
     }
 
     #[test]

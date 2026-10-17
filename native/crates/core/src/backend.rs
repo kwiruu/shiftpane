@@ -1,7 +1,9 @@
 //! The contract each OS crate implements.
 
 use crate::mode::Mode;
-use crate::protocol::{BackendInfo, Capabilities, DisplayInfo, HelperError};
+use crate::protocol::{
+    BackendInfo, Capabilities, DisplayInfo, HelperError, MediaAction, MediaState, SystemStats,
+};
 
 /// One virtual-monitor strategy for one OS.
 ///
@@ -30,6 +32,28 @@ pub trait DisplayBackend {
 
     /// Removes the virtual monitor. Must be safe to call when none exists.
     fn detach(&mut self) -> Result<(), HelperError>;
+
+    /// Load of the PC for the stats widget. These three are not about displays, but the helper
+    /// is the one native process the desktop app runs, so they live on the same backend; an OS
+    /// without them keeps these defaults.
+    fn system_stats(&mut self) -> Result<SystemStats, HelperError> {
+        Err(HelperError::unsupported(
+            "system stats are not available on this OS yet",
+        ))
+    }
+
+    fn media_state(&mut self) -> Result<MediaState, HelperError> {
+        Err(HelperError::unsupported(
+            "media controls are not available on this OS yet",
+        ))
+    }
+
+    fn media_control(&mut self, action: MediaAction) -> Result<(), HelperError> {
+        let _ = action;
+        Err(HelperError::unsupported(
+            "media controls are not available on this OS yet",
+        ))
+    }
 }
 
 /// Backend for targets with no implementation, so the helper still starts and reports why.
