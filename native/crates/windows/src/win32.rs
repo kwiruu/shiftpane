@@ -8,20 +8,23 @@ use std::mem::{size_of, zeroed};
 use std::ptr::{null, null_mut};
 use std::sync::Once;
 
+use windows_sys::Win32::Devices::Display::{SDC_APPLY, SDC_TOPOLOGY_EXTEND, SetDisplayConfig};
 use windows_sys::Win32::Foundation::POINT;
 use windows_sys::Win32::Graphics::Gdi::{
     CDS_NORESET, CDS_TEST, CDS_UPDATEREGISTRY, ChangeDisplaySettingsExW, DEVMODEW,
-    DISP_CHANGE_SUCCESSFUL, DISPLAY_DEVICE_ATTACHED_TO_DESKTOP, DISPLAY_DEVICE_PRIMARY_DEVICE,
-    DISPLAY_DEVICEW, DM_BITSPERPEL, DM_DISPLAYFREQUENCY, DM_PELSHEIGHT, DM_PELSWIDTH, DM_POSITION,
-    ENUM_CURRENT_SETTINGS, EnumDisplayDevicesW, EnumDisplaySettingsW, MONITOR_DEFAULTTONEAREST,
-    MonitorFromPoint,
+    DISP_CHANGE_SUCCESSFUL, DISPLAY_DEVICE_ACTIVE, DISPLAY_DEVICE_ATTACHED_TO_DESKTOP,
+    DISPLAY_DEVICE_PRIMARY_DEVICE, DISPLAY_DEVICEW, DM_BITSPERPEL, DM_DISPLAYFREQUENCY,
+    DM_PELSHEIGHT, DM_PELSWIDTH, DM_POSITION, ENUM_CURRENT_SETTINGS, EnumDisplayDevicesW,
+    EnumDisplaySettingsW, MONITOR_DEFAULTTONEAREST, MonitorFromPoint,
 };
+
+use crate::plan;
 use windows_sys::Win32::UI::HiDpi::{
     DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2, GetDpiForMonitor, MDT_EFFECTIVE_DPI,
     SetProcessDpiAwarenessContext,
 };
 
-/// One display output Windows knows about, attached to the desktop or not.
+/// One display output (a GDI source) Windows knows about, attached to the desktop or not.
 #[derive(Debug, Clone)]
 pub struct Adapter {
     /// GDI device name such as `\\.\DISPLAY7`. It changes when the driver restarts, so it is
@@ -29,10 +32,13 @@ pub struct Adapter {
     pub device_name: String,
     /// The graphics adapter's description, e.g. `Virtual Display Driver`.
     pub description: String,
-    /// The attached monitor's device id, e.g. `MONITOR\MTT1337\{...}\0006`; empty if none.
-    pub monitor_id: String,
-    /// The monitor's friendly name, e.g. `Generic PnP Monitor`; empty if none.
+    /// The graphics adapter's device id, e.g. `Root\MttVDD` or `PCI\VEN_8086&...`.
+    pub device_id: String,
+    /// The first monitor's friendly name, e.g. `Generic PnP Monitor`; empty if none.
     pub monitor_name: String,
+    /// Every monitor showing this output's picture: more than one when displays are cloned
+    /// (Windows' "Duplicate these displays"). `(device id, active)`.
+    pub monitors: Vec<(String, bool)>,
     pub attached: bool,
     pub primary: bool,
 }
@@ -79,28 +85,65 @@ pub fn adapters() -> Vec<Adapter> {
         if unsafe { EnumDisplayDevicesW(null(), index, &raw mut device, 0) } == 0 {
             break;
         }
-        let mut monitor = empty_device();
-        // SAFETY: `device.DeviceName` is NUL-terminated and `monitor` is valid.
-        let has_monitor =
-            unsafe { EnumDisplayDevicesW(device.DeviceName.as_ptr(), 0, &raw mut monitor, 0) } != 0;
+        let mut monitors = Vec::new();
+        let mut monitor_name = String::new();
+        for monitor_index in 0..8 {
+            let mut monitor = empty_device();
+            // SAFETY: `device.DeviceName` is NUL-terminated and `monitor` is valid.
+            let found_one = unsafe {
+                EnumDisplayDevicesW(
+                    device.DeviceName.as_ptr(),
+                    monitor_index,
+                    &raw mut monitor,
+                    0,
+                )
+            } != 0;
+            if !found_one {
+                break;
+            }
+            if monitors.is_empty() {
+                monitor_name = from_wide(&monitor.DeviceString);
+            }
+            monitors.push((
+                from_wide(&monitor.DeviceID),
+                monitor.StateFlags & DISPLAY_DEVICE_ACTIVE != 0,
+            ));
+        }
         found.push(Adapter {
             device_name: from_wide(&device.DeviceName),
             description: from_wide(&device.DeviceString),
-            monitor_id: if has_monitor {
-                from_wide(&monitor.DeviceID)
-            } else {
-                String::new()
-            },
-            monitor_name: if has_monitor {
-                from_wide(&monitor.DeviceString)
-            } else {
-                String::new()
-            },
+            device_id: from_wide(&device.DeviceID),
+            monitor_name,
+            monitors,
             attached: device.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP != 0,
             primary: device.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE != 0,
         });
     }
     found
+}
+
+/// True while Windows shows the virtual monitor as a copy of another display ("Duplicate these
+/// displays"): its monitor is then active under another adapter's output, and the virtual
+/// monitor cannot extend the desktop.
+pub fn virtual_monitor_cloned() -> bool {
+    adapters().iter().any(|adapter| {
+        !plan::is_virtual_display(&adapter.description, &adapter.device_id)
+            && adapter
+                .monitors
+                .iter()
+                .any(|(id, active)| *active && plan::is_virtual_monitor_id(id))
+    })
+}
+
+/// Switches Windows to "Extend these displays", what Windows+P > Extend does.
+pub fn extend_desktop() -> Result<(), String> {
+    // SAFETY: no path or mode arrays are passed; the topology flag tells Windows what to apply.
+    let code = unsafe { SetDisplayConfig(0, null(), 0, null(), SDC_APPLY | SDC_TOPOLOGY_EXTEND) };
+    if code == 0 {
+        Ok(())
+    } else {
+        Err(format!("SetDisplayConfig returned {code}"))
+    }
 }
 
 fn read_position(mode: &DEVMODEW) -> (i32, i32) {

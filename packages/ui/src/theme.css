@@ -8,19 +8,20 @@
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
 
-  --color-surface: oklch(0.17 0.01 260);
-  --color-surface-raised: oklch(0.22 0.012 260);
-  --color-surface-sunken: oklch(0.13 0.008 260);
-  --color-border: oklch(0.32 0.012 260);
-  --color-ink: oklch(0.96 0.005 260);
-  --color-ink-muted: oklch(0.72 0.01 260);
-  --color-accent: oklch(0.78 0.16 195);
-  --color-accent-ink: oklch(0.2 0.03 195);
-  --color-ok: oklch(0.8 0.17 150);
-  --color-warn: oklch(0.83 0.16 80);
-  --color-danger: oklch(0.68 0.2 25);
+  /* Near-black neutrals, panels a step lighter than the window, and one lime accent. */
+  --color-surface: oklch(0.195 0.003 286);
+  --color-surface-raised: oklch(0.245 0.004 286);
+  --color-surface-sunken: oklch(0.145 0.002 286);
+  --color-border: oklch(0.3 0.005 286);
+  --color-ink: oklch(0.97 0.002 286);
+  --color-ink-muted: oklch(0.68 0.008 286);
+  --color-accent: oklch(0.9 0.19 125);
+  --color-accent-ink: oklch(0.22 0.04 125);
+  --color-ok: oklch(0.82 0.19 145);
+  --color-warn: oklch(0.83 0.16 75);
+  --color-danger: oklch(0.68 0.21 27);
 
-  --radius-panel: 1.25rem;
+  --radius-panel: 1.5rem;
 }
 
 @media (prefers-color-scheme: light) {

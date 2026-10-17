@@ -1,4 +1,4 @@
-import type { PhoneMessage } from '@shiftpane/protocol'
+import type { MonitorSource, PhoneMessage } from '@shiftpane/protocol'
 
 type StreamMessage = Extract<PhoneMessage, { type: 'stream.request' | 'stream.stop' }>
 
@@ -9,15 +9,19 @@ export interface ScreenInfo {
   devicePixelRatio: number
 }
 
+const VIRTUAL: MonitorSource = { kind: 'virtual' }
+
 /**
  * The message that makes the PC's monitor match `stream` (null: no monitor wanted).
  *
  * A request carries the viewport `stream` was computed from, so the PC can prepare the sizes of
- * this exact screen, not of the viewport the phone paired with.
+ * this exact screen, not of the viewport the phone paired with, and what to show: the virtual
+ * monitor, or a copy of one of the PC's real monitors.
  */
 export function streamMessageFor(
   stream: { width: number; height: number } | null,
   screen: ScreenInfo,
+  source: MonitorSource = VIRTUAL,
 ): StreamMessage {
   return stream
     ? {
@@ -28,6 +32,7 @@ export function streamMessageFor(
           viewport: { width: screen.width, height: screen.height },
           devicePixelRatio: screen.devicePixelRatio,
         },
+        source,
       }
     : { type: 'stream.stop' }
 }

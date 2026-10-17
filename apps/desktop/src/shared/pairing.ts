@@ -1,5 +1,7 @@
 /** Pairing state the main process pushes to the desktop window. Types only: shared by main, preload and renderer. */
 
+import type { ScreenReport } from '@shiftpane/protocol'
+
 export interface LanHost {
   address: string
   interface: string
@@ -12,6 +14,8 @@ export interface ConnectedPhone {
   viewport: { width: number; height: number }
   devicePixelRatio: number
   connectedAt: number
+  /** How the phone's screen is laid out now (size, split, safe area); null until it says. */
+  screen: ScreenReport | null
 }
 
 export type PairingState =
@@ -48,4 +52,12 @@ export const IpcChannel = {
   displayRetry: 'display:retry',
   captureCommand: 'capture:command',
   captureEvent: 'capture:event',
+  boardGet: 'board:get',
+  boardSet: 'board:set',
+  boardChanged: 'board:changed',
+  windowMinimize: 'window:minimize',
+  windowToggleMaximize: 'window:toggle-maximize',
+  windowClose: 'window:close',
+  windowIsMaximized: 'window:is-maximized',
+  windowMaximized: 'window:maximized',
 } as const

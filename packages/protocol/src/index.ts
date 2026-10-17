@@ -1,3 +1,5 @@
+export * from './board.ts'
 export * from './connection.ts'
 export * from './messages.ts'
 export * from './pairing.ts'
+export * from './widgets.ts'

@@ -12,10 +12,12 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
+    "@shiftpane/board": "workspace:*",
     "@shiftpane/layout": "workspace:*",
     "@shiftpane/protocol": "workspace:*",
     "react": "catalog:",
-    "react-dom": "catalog:"
+    "react-dom": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@shiftpane/ui": "workspace:*",
@@ -28,6 +30,7 @@
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-pwa": "^2.0.0",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "workbox-window": "7.4.1"
   }
 }

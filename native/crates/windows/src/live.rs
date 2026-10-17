@@ -7,10 +7,47 @@ use std::thread::sleep;
 use std::time::{Duration, Instant};
 
 use shiftpane_core::Mode;
-use shiftpane_core::protocol::{DisplayInfo, ErrorCode, HelperError};
+use shiftpane_core::protocol::{
+    DisplayInfo, ErrorCode, HelperError, MediaAction, MediaState, SystemStats,
+};
 
 use crate::win32::{self, Adapter, CurrentMode};
-use crate::{DEFAULT_SETTINGS_PATH, elevated, plan, settings};
+use crate::{DEFAULT_SETTINGS_PATH, elevated, media, plan, settings, stats};
+
+/// The performance counter query, opened the first time stats are asked for.
+#[derive(Debug, Default)]
+pub struct Stats {
+    sampler: Option<stats::Sampler>,
+    opened: bool,
+}
+
+// Reading stats cannot fail as a whole (missing parts are null), but the signature matches the
+// stand-in used on other OSes.
+#[allow(clippy::unnecessary_wraps)]
+pub fn system_stats(state: &mut Stats) -> Result<SystemStats, HelperError> {
+    if !state.opened {
+        state.opened = true;
+        state.sampler = stats::Sampler::new();
+    }
+    Ok(match state.sampler.as_mut() {
+        Some(sampler) => sampler.sample(),
+        None => stats::memory_only(),
+    })
+}
+
+pub fn media_state() -> Result<MediaState, HelperError> {
+    media::state().map_err(|e| internal(format!("could not read the media controls: {e}")))
+}
+
+pub fn media_control(action: MediaAction) -> Result<(), HelperError> {
+    match media::control(action) {
+        Ok(true) => Ok(()),
+        Ok(false) => Err(internal(
+            "nothing is playing, or the app that is playing ignored the button",
+        )),
+        Err(e) => Err(internal(format!("could not press the media button: {e}"))),
+    }
+}
 
 /// After restarting the driver, how long to wait for it to list the new size.
 const RELOAD_TIMEOUT: Duration = Duration::from_secs(20);
@@ -29,12 +66,35 @@ fn driver_missing() -> HelperError {
     )
 }
 
-/// The driver's display output. Looked up on every call because its device name changes
-/// whenever the driver restarts.
+/// The driver's own display output. Looked up on every call because its device name changes
+/// whenever the driver restarts. Matched on the output's adapter, never on the monitor: when
+/// Windows duplicates displays, the virtual monitor is listed under the laptop's output too.
 fn find_virtual() -> Option<Adapter> {
     win32::adapters()
         .into_iter()
-        .find(|a| plan::is_virtual_display(&a.description, &a.monitor_id))
+        .find(|a| plan::is_virtual_display(&a.description, &a.device_id))
+}
+
+/// Takes the virtual monitor out of "Duplicate these displays", which Windows can choose on
+/// its own (for example a laptop with no other screen plugged in), so it extends the desktop.
+fn stop_duplicating() -> Result<(), HelperError> {
+    if !win32::virtual_monitor_cloned() {
+        return Ok(());
+    }
+    tracing::info!("the virtual monitor is duplicating another display; switching to extend");
+    win32::extend_desktop().map_err(|e| {
+        internal(format!(
+            "could not switch Windows from duplicate to extend: {e}"
+        ))
+    })?;
+    wait_for(APPLY_TIMEOUT, || {
+        (!win32::virtual_monitor_cloned()).then_some(())
+    })
+    .ok_or_else(|| {
+        internal(
+            "Windows kept the virtual monitor duplicating another display; press Windows+P and choose Extend",
+        )
+    })
 }
 
 fn to_info(adapter: &Adapter, mode: CurrentMode) -> DisplayInfo {
@@ -52,7 +112,7 @@ fn to_info(adapter: &Adapter, mode: CurrentMode) -> DisplayInfo {
         refresh_hz: mode.hz,
         scale_factor: win32::scale_factor(mode.x, mode.y, mode.width, mode.height),
         primary: adapter.primary,
-        virtual_display: plan::is_virtual_display(&adapter.description, &adapter.monitor_id),
+        virtual_display: plan::is_virtual_display(&adapter.description, &adapter.device_id),
     }
 }
 
@@ -107,6 +167,16 @@ fn ensure_sizes(wanted: &[(u32, u32)]) -> Result<u32, HelperError> {
             listed.len()
         )));
     }
+    // Sizes already in the driver's file that Windows still does not offer will not appear
+    // after a restart either, so asking for approval again would only repeat the prompt.
+    if missing.iter().all(|size| listed.contains(size)) {
+        let list: Vec<String> = missing.iter().map(|(w, h)| format!("{w}x{h}")).collect();
+        return Err(internal(format!(
+            "the driver lists {} but Windows does not offer it for the virtual monitor; \
+             restarting the PC usually fixes this",
+            list.join(", ")
+        )));
+    }
 
     elevated::add_modes(&missing)?;
     wait_for(RELOAD_TIMEOUT, || {
@@ -137,6 +207,9 @@ pub fn attach(mode: Mode) -> Result<DisplayInfo, HelperError> {
         ));
     }
     let (width, height) = (mode.width, mode.height);
+
+    // 0. A virtual monitor Windows is using as a copy of another display cannot extend it.
+    stop_duplicating()?;
 
     // 1. Make sure the driver offers this size; adding it is the only step that needs UAC.
     //    `display.prepare` normally did this already, so this is a no-op in the common case.

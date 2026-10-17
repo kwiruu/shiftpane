@@ -13,12 +13,16 @@ export interface DisplayServiceOptions {
   log?: (message: string) => void
 }
 
-/** The virtual-monitor controller wired to the real helper executable. */
-export function createDisplayController(options: DisplayServiceOptions): DisplayController {
-  const log = options.log ?? ((message: string) => console.info(`[display] ${message}`))
-  const host = new HelperHost({
+const defaultLog = (message: string) => console.info(`[display] ${message}`)
+
+/**
+ * The one helper process, wired to the real executable. The display controller drives the
+ * virtual monitor through it, and the widgets read PC stats and media through the same process.
+ */
+export function createHelperHost(options: DisplayServiceOptions): HelperHost {
+  return new HelperHost({
     expectedProtocol: HELPER_PROTOCOL_VERSION,
-    log,
+    log: options.log ?? defaultLog,
     locate: () =>
       locateHelper({
         packaged: options.packaged,
@@ -37,8 +41,16 @@ export function createDisplayController(options: DisplayServiceOptions): Display
       }),
     open: openHelperProcess,
   })
+}
+
+/** The virtual-monitor controller, on the shared helper. */
+export function createDisplayController(
+  host: HelperHost,
+  log: (message: string) => void = defaultLog,
+): DisplayController {
   return new DisplayController({ host, log })
 }
 
 export type { DisplayController } from './controller.ts'
+export type { HelperHost } from './helper-host.ts'
 export { bindDisplayToHub } from './hub.ts'

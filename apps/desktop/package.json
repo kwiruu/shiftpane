@@ -16,6 +16,7 @@
     "package:dir": "electron-builder --dir --publish never"
   },
   "devDependencies": {
+    "@shiftpane/board": "workspace:*",
     "@shiftpane/helper-client": "workspace:*",
     "@shiftpane/layout": "workspace:*",
     "@shiftpane/protocol": "workspace:*",

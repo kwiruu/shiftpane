@@ -42,6 +42,8 @@ export class PairingService extends EventEmitter<{ change: [PairingState] }> {
       features: () => ({ display: options.displayAvailable?.() ?? false, remoteControl: false }),
     })
     this.hub.on('change', () => void this.#publish())
+    // The window's layout editor previews each phone's screen as it is now.
+    this.hub.on('screen', () => void this.#publish())
   }
 
   get state(): PairingState {

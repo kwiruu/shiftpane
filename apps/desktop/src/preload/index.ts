@@ -1,3 +1,4 @@
+import type { Board } from '@shiftpane/protocol'
 import { contextBridge, type IpcRendererEvent, ipcRenderer } from 'electron'
 import type { CaptureEvent } from '../shared/capture.ts'
 import type { DisplayState } from '../shared/display.ts'
@@ -40,6 +41,26 @@ const api: ShiftPaneApi = {
     allow: () => ipcRenderer.invoke(IpcChannel.firewallAllow) as Promise<FirewallAllowResult>,
     openSettings: (page) =>
       ipcRenderer.invoke(IpcChannel.firewallOpenSettings, page) as Promise<void>,
+  },
+  board: {
+    get: () => ipcRenderer.invoke(IpcChannel.boardGet) as Promise<Board | null>,
+    onChange: (listener) => {
+      const handler = (_event: IpcRendererEvent, board: Board | null) => listener(board)
+      ipcRenderer.on(IpcChannel.boardChanged, handler)
+      return () => ipcRenderer.off(IpcChannel.boardChanged, handler)
+    },
+    set: (board) => ipcRenderer.invoke(IpcChannel.boardSet, board) as Promise<void>,
+  },
+  window: {
+    minimize: () => ipcRenderer.invoke(IpcChannel.windowMinimize) as Promise<void>,
+    toggleMaximize: () => ipcRenderer.invoke(IpcChannel.windowToggleMaximize) as Promise<void>,
+    close: () => ipcRenderer.invoke(IpcChannel.windowClose) as Promise<void>,
+    isMaximized: () => ipcRenderer.invoke(IpcChannel.windowIsMaximized) as Promise<boolean>,
+    onMaximizedChange: (listener) => {
+      const handler = (_event: IpcRendererEvent, maximized: boolean) => listener(maximized)
+      ipcRenderer.on(IpcChannel.windowMaximized, handler)
+      return () => ipcRenderer.off(IpcChannel.windowMaximized, handler)
+    },
   },
   display: {
     get: () => ipcRenderer.invoke(IpcChannel.displayGet) as Promise<DisplayState>,

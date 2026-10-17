@@ -22,6 +22,9 @@ interface ResultTypes {
   'display.attach': 'attached'
   'display.prepare': 'prepared'
   'display.detach': 'detached'
+  'system.stats': 'systemStats'
+  'media.state': 'media'
+  'media.control': 'mediaControlled'
 }
 export type ResultOf<M extends Method> = Extract<CallResult, { type: ResultTypes[M] }>
 

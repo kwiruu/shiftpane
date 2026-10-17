@@ -51,7 +51,9 @@ export function bindDisplayToHub(display: DisplayBinding, hub: PhoneHub): () => 
 
   const onMessage = (phone: PhoneInfo, message: PhoneMessage) => {
     if (message.type === 'stream.request') {
-      display.streamRequested(phone.id, message.size, message.device)
+      // A copy of a real monitor needs no virtual one; the stream manager captures that monitor.
+      if (message.source?.kind === 'mirror') display.streamStopped(phone.id)
+      else display.streamRequested(phone.id, message.size, message.device)
     } else if (message.type === 'stream.stop') {
       display.streamStopped(phone.id)
     }

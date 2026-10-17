@@ -1,5 +1,6 @@
 import { realpathSync } from 'node:fs'
 import { join } from 'node:path'
+import { Board } from '@shiftpane/protocol'
 import {
   app,
   BrowserWindow,
@@ -17,15 +18,18 @@ import {
   type SettingsPage,
 } from '../shared/firewall.ts'
 import { IpcChannel } from '../shared/pairing.ts'
+import { BoardService, EDITOR, fileStorage } from './board/service.ts'
 import {
   bindDisplayToHub,
   createDisplayController,
+  createHelperHost,
   type DisplayController,
 } from './display/index.ts'
 import { FirewallMonitor } from './firewall/monitor.ts'
 import { allowThroughFirewall, queryFirewall } from './firewall/powershell.ts'
 import { PairingService } from './pairing.ts'
 import { type StreamingService, startStreaming } from './stream/service.ts'
+import { startWidgets, type WidgetService } from './widgets/index.ts'
 
 const isDev = !app.isPackaged && process.env.ELECTRON_RENDERER_URL !== undefined
 const platform =
@@ -45,6 +49,8 @@ let pairing: PairingService | null = null
 let firewall: FirewallMonitor | null = null
 let display: DisplayController | null = null
 let streaming: StreamingService | null = null
+let widgets: WidgetService | null = null
+let board: BoardService | null = null
 
 const UNKNOWN_FIREWALL: FirewallState = { status: 'unknown' }
 const SettingsPageSchema = z.enum(SETTINGS_PAGES)
@@ -75,13 +81,20 @@ function createFirewallMonitor(): FirewallMonitor | null {
 
 function createWindow(): BrowserWindow {
   const window = new BrowserWindow({
-    width: 960,
-    height: 640,
-    minWidth: 720,
-    minHeight: 480,
+    width: 1280,
+    height: 820,
+    // The phone layout editor needs its three columns.
+    minWidth: 980,
+    minHeight: 560,
     show: false,
     title: 'ShiftPane',
-    backgroundColor: '#16181d',
+    backgroundColor: '#181818',
+    // The window draws its own title bar and buttons; macOS keeps its traffic lights.
+    ...(process.platform === 'darwin'
+      ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 18 } }
+      : { frame: false }),
+    // Unpackaged runs show the app's icon too; packaged apps take it from the executable.
+    ...(app.isPackaged ? {} : { icon: join(app.getAppPath(), 'build/icon.png') }),
     autoHideMenuBar: true,
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -120,6 +133,11 @@ function createWindow(): BrowserWindow {
   window.on('closed', () => {
     mainWindow = null
   })
+  // The title bar shows restore instead of maximize while the window fills the screen.
+  const sendMaximized = () =>
+    window.webContents.send(IpcChannel.windowMaximized, window.isMaximized())
+  window.on('maximize', sendMaximized)
+  window.on('unmaximize', sendMaximized)
 
   if (isDev && process.env.ELECTRON_RENDERER_URL) {
     void window.loadURL(process.env.ELECTRON_RENDERER_URL)
@@ -186,6 +204,37 @@ function registerDisplayIpc(controller: DisplayController): void {
   controller.on('change', (state) => mainWindow?.webContents.send(IpcChannel.displayChanged, state))
 }
 
+/** The title bar's own minimize, maximize and close buttons. None of them take arguments. */
+function registerWindowIpc(): void {
+  ipcMain.handle(IpcChannel.windowMinimize, (event) => {
+    if (fromMainWindow(event)) mainWindow?.minimize()
+  })
+  ipcMain.handle(IpcChannel.windowToggleMaximize, (event) => {
+    if (!fromMainWindow(event) || !mainWindow) return
+    if (mainWindow.isMaximized()) mainWindow.unmaximize()
+    else mainWindow.maximize()
+  })
+  ipcMain.handle(IpcChannel.windowClose, (event) => {
+    if (fromMainWindow(event)) mainWindow?.close()
+  })
+  ipcMain.handle(IpcChannel.windowIsMaximized, (event) =>
+    fromMainWindow(event) ? (mainWindow?.isMaximized() ?? false) : false,
+  )
+}
+
+function registerBoardIpc(service: BoardService): void {
+  ipcMain.handle(IpcChannel.boardGet, (event) => (fromMainWindow(event) ? service.current() : null))
+  // The editor's board is checked like a phone's before it is kept or sent anywhere.
+  ipcMain.handle(IpcChannel.boardSet, (event, value: unknown) => {
+    const parsed = Board.safeParse(value)
+    if (fromMainWindow(event) && parsed.success) service.set(parsed.data, EDITOR)
+  })
+  // The window already shows its own edits; sending them back would undo a drag in progress.
+  service.on('change', (value, from) => {
+    if (from !== EDITOR) mainWindow?.webContents.send(IpcChannel.boardChanged, value)
+  })
+}
+
 function registerIpc(service: PairingService): void {
   ipcMain.handle(IpcChannel.pairingGet, (event) => (fromMainWindow(event) ? service.state : null))
   ipcMain.handle(IpcChannel.pairingSelectHost, async (event, address: unknown) => {
@@ -222,19 +271,23 @@ app.on('before-quit', (event) => {
   event.preventDefault()
   // Phones first, so nothing asks for a monitor while it is being removed.
   streaming?.stop()
+  widgets?.stop()
+  board?.stop()
   void pairing
     .stop()
+    .then(() => board?.flush())
     .then(() => display?.stop())
     .finally(() => app.quit())
 })
 
 app.whenReady().then(() => {
   hardenSession()
-  display = createDisplayController({
+  const helper = createHelperHost({
     packaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
     appPath: app.getAppPath(),
   })
+  display = createDisplayController(helper)
   const controller = display
   pairing = new PairingService({
     dataDir: app.getPath('userData'),
@@ -253,7 +306,18 @@ app.whenReady().then(() => {
     getWindow: () => mainWindow,
     fromWindow: fromMainWindow,
   })
+  widgets = startWidgets({
+    hub: pairing.hub,
+    helper: async () => (await helper.session()).channel,
+  })
+  board = new BoardService({
+    hub: pairing.hub,
+    storage: fileStorage(join(app.getPath('userData'), 'board.json')),
+    log: (message) => console.info(`[board] ${message}`),
+  })
   registerIpc(pairing)
+  registerWindowIpc()
+  registerBoardIpc(board)
   registerDisplayIpc(controller)
   firewall = createFirewallMonitor()
   registerFirewallIpc(pairing, firewall)

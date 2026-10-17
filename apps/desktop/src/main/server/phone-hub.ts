@@ -9,6 +9,7 @@ import {
   type PhoneMessage,
   PROTOCOL_VERSION,
   parsePhoneMessage,
+  type ScreenReport,
   tokensEqual,
 } from '@shiftpane/protocol'
 
@@ -26,6 +27,8 @@ export interface PhoneInfo {
   viewport: { width: number; height: number }
   devicePixelRatio: number
   connectedAt: number
+  /** How the phone's screen is laid out now (size, split, safe area); null until it says. */
+  screen: ScreenReport | null
 }
 
 type Welcome = Extract<PcMessage, { type: 'welcome' }>
@@ -43,8 +46,13 @@ export interface PhoneHubOptions {
 export interface PhoneHubEvents {
   /** The list of paired phones changed. */
   change: [PhoneInfo[]]
-  /** A validated message from a paired phone (everything except hello and ping). */
+  /** A validated message from a paired phone (everything except hello, ping and screen). */
   message: [PhoneInfo, PhoneMessage]
+  /**
+   * A phone's screen changed (rotation, split). Separate from `change` so the display and the
+   * stream, which follow `change`, are not disturbed by it.
+   */
+  screen: [PhoneInfo]
 }
 
 interface Paired {
@@ -168,6 +176,7 @@ export class PhoneHub extends EventEmitter<PhoneHubEvents> {
         viewport: hello.device.viewport,
         devicePixelRatio: hello.device.devicePixelRatio,
         connectedAt: this.#options.now(),
+        screen: null,
       },
     }
     this.#paired.set(id, phone)
@@ -202,6 +211,12 @@ export class PhoneHub extends EventEmitter<PhoneHubEvents> {
       case 'ping':
         phone.connection.send(encode({ type: 'pong', at: message.at }))
         return
+      case 'screen': {
+        const { type: _, ...screen } = message
+        phone.info.screen = screen
+        this.emit('screen', phone.info)
+        return
+      }
       default:
         this.emit('message', phone.info, message)
     }
