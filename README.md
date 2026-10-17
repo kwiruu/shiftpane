@@ -19,6 +19,7 @@ apps/
 packages/
   protocol/           PC <-> phone WebSocket messages and pairing tokens (zod)
   layout/             Split-view math: phone size + split + pixel ratio -> monitor resolution
+  board/              Widget board: tables of widgets and the built-in widgets (React), for phone and desktop
   widget-sdk/         Widget manifest schema (+ generated JSON Schema) and defineCollector
   helper-client/      Typed client for the native helper; types generated from Rust
   ui/                 Tailwind v4 design tokens shared by both apps

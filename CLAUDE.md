@@ -28,6 +28,8 @@ TypeScript, a Cargo workspace for the native helper. See README.md for the layou
 - OS-specific Rust goes behind `cfg` in `native/crates/{windows,macos,linux}`; every crate must still compile on every OS.
 - Electron windows keep `contextIsolation`, `sandbox` and no `nodeIntegration`; the renderer gets only `window.shiftpane`
   (typed in `apps/desktop/src/preload/api.ts`).
+- The main window is frameless on Windows and Linux (macOS keeps its traffic lights) and draws its own buttons. The
+  title bar, page heading and logo are `-webkit-app-region: drag`; anything clickable inside them needs `no-drag`.
 
 ## Gotchas
 
@@ -37,6 +39,10 @@ TypeScript, a Cargo workspace for the native helper. See README.md for the layou
   `apps/desktop/electron.vite.config.ts`); without them every WebSocket frame over 32 bytes silently kills the
   connection. Unit tests run unbundled `ws` and will not catch this, so test pairing against the built app.
 - The desktop app serves the phone app from `apps/phone/dist` in dev; rebuild the phone app to see phone changes there.
+- The phone's Vite dev server runs in demo mode (sample data, no PC), so the phone UI can be designed in a desktop
+  browser. The phone only shows the widget board; it is laid out in the desktop window's Phone layout view
+  (`renderer/src/layout/`), and the PC keeps it (`main/board/`). The widgets and table rendering shared by both live
+  in `packages/board`; apps import `@shiftpane/board/board.css` after Tailwind, which `@source`s the package.
 - Set `ELECTRON_SKIP_BINARY_DOWNLOAD=1` for installs that never launch Electron (CI lint jobs do).
 - Streaming the virtual monitor: the main process arms the one `desktopCapturer` source (`main/stream/gate.ts`) and the
   window takes it with `getDisplayMedia`; the session grants media permission only for that request. A source's

@@ -136,6 +136,26 @@ describe('PhoneHub after pairing', () => {
     expect(closes).toEqual([])
   })
 
+  it('keeps the phone’s latest screen and reports it apart from the phone list', () => {
+    const hub = makeHub()
+    const { handlers } = pair(hub)
+    const changes = vi.fn()
+    const screens: PhoneInfo[] = []
+    hub.on('change', changes)
+    hub.on('screen', (phone) => screens.push(phone))
+    expect(hub.phones[0]?.screen).toBeNull()
+    const screen = {
+      viewport: { width: 852, height: 393 },
+      devicePixelRatio: 3,
+      monitorFraction: 0.5,
+      safeArea: { top: 0, right: 47, bottom: 21, left: 47 },
+    }
+    handlers.onMessage(JSON.stringify({ type: 'screen', ...screen }))
+    expect(hub.phones[0]?.screen).toEqual(screen)
+    expect(screens).toHaveLength(1)
+    expect(changes).not.toHaveBeenCalled()
+  })
+
   it('removes a phone when its socket closes, and on Disconnect', () => {
     const hub = makeHub()
     const first = pair(hub)

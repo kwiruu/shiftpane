@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import type { HelperDisplay, Rect, ScreenSource } from './match.ts'
-import { CaptureSourceError, findCaptureSource, type ScreenModule } from './source.ts'
+import {
+  CaptureSourceError,
+  findCaptureSource,
+  findMirrorSource,
+  type ScreenModule,
+} from './source.ts'
 
 const target: HelperDisplay = {
   id: '\\\\.\\DISPLAY8',
@@ -42,6 +47,30 @@ const physicalDisplay: FakeDisplay = {
 }
 
 const noWait = async () => {}
+
+describe('findMirrorSource', () => {
+  const sources: ScreenSource[] = [
+    { id: 'screen:1:0', name: 'Screen 1', display_id: '1' },
+    { id: 'screen:2:0', name: 'Screen 2', display_id: '4242' },
+  ]
+
+  it('returns the source of the monitor the phone chose, after listing the displays', async () => {
+    const { screen, calls } = fakeScreen(() => [physicalDisplay, virtualDisplay])
+    const source = await findMirrorSource('1', screen, { getSources: async () => sources })
+    expect(source.id).toBe('screen:1:0')
+    expect(calls).toEqual(['displays'])
+  })
+
+  it('says so when the monitor is gone or has no source', async () => {
+    const { screen } = fakeScreen(() => [physicalDisplay])
+    await expect(
+      findMirrorSource('77', screen, { getSources: async () => sources }),
+    ).rejects.toThrow(new CaptureSourceError('That monitor is no longer connected to the PC.'))
+    await expect(findMirrorSource('1', screen, { getSources: async () => [] })).rejects.toThrow(
+      CaptureSourceError,
+    )
+  })
+})
 
 describe('findCaptureSource', () => {
   it('returns the source of the display at the helper rectangle', async () => {

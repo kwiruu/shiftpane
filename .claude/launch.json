@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "phone",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@shiftpane/phone", "dev", "--port", "5173", "--strictPort"],
+      "port": 5173
+    }
+  ]
+}
