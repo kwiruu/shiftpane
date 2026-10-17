@@ -7,7 +7,9 @@
  */
 
 import { z } from 'zod'
+import { Board } from './board.ts'
 import { PairingToken } from './pairing.ts'
+import { MediaAction, WidgetId } from './widgets.ts'
 
 export const PROTOCOL_VERSION = 1
 
@@ -17,6 +19,19 @@ const DevicePixelRatio = z.number().positive().max(8)
 
 export const Quality = z.enum(['full', 'half', 'auto'])
 export type Quality = z.infer<typeof Quality>
+
+/** One of the PC's real monitors: Electron's `Display.id`, as a string. */
+const DisplayId = z.string().regex(/^[0-9A-Za-z_-]{1,32}$/)
+
+/**
+ * What the phone's monitor area shows: the virtual monitor ShiftPane adds to the PC (extend),
+ * or a copy of one of the PC's real monitors (duplicate).
+ */
+export const MonitorSource = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('virtual') }),
+  z.object({ kind: z.literal('mirror'), displayId: DisplayId }),
+])
+export type MonitorSource = z.infer<typeof MonitorSource>
 
 // ---------------------------------------------------------------------------------------
 // phone -> PC
@@ -55,9 +70,70 @@ export const StreamRequestMessage = z.object({
    * size; that is why this addition did not bump `PROTOCOL_VERSION`.
    */
   device: z.object({ viewport: Size, devicePixelRatio: DevicePixelRatio }).optional(),
+  /**
+   * What to stream. Absent means the virtual monitor, which is what phones that predate this
+   * field ask for. When it is a real monitor, `size` is not applied to anything: that monitor
+   * keeps its own resolution and the phone letterboxes it.
+   */
+  source: MonitorSource.optional(),
 })
 
 export const StreamStopMessage = z.object({ type: z.literal('stream.stop') })
+
+/**
+ * The widgets on the phone that need data from the PC. The PC runs those collectors only while
+ * some phone shows them, and replaces the previous list with each message.
+ */
+export const WidgetsSubscribeMessage = z.object({
+  type: z.literal('widgets.subscribe'),
+  widgets: z.array(WidgetId).max(32),
+})
+
+/** A media button on the phone; the PC presses it on whatever is playing. */
+export const MediaControlMessage = z.object({
+  type: z.literal('media.control'),
+  action: MediaAction,
+})
+
+const Inset = z.number().min(0).max(512)
+
+/** Which way up the screen is, as `screen.orientation.type` says. */
+export const ScreenTurn = z.enum([
+  'portrait-primary',
+  'portrait-secondary',
+  'landscape-primary',
+  'landscape-secondary',
+])
+export type ScreenTurn = z.infer<typeof ScreenTurn>
+
+/**
+ * How this phone's screen is laid out right now. Sent after `welcome` and again, after a short
+ * pause, whenever the viewport (a rotation, a collapsing browser toolbar) or the split changes,
+ * so the desktop editor can preview the board exactly as this phone shows it.
+ */
+export const ScreenMessage = z.object({
+  type: z.literal('screen'),
+  /** CSS pixels. */
+  viewport: Size,
+  devicePixelRatio: DevicePixelRatio,
+  /** The split: share of the long axis the monitor takes, 0 (widgets only) to 1 (monitor only). */
+  monitorFraction: z.number().min(0).max(1),
+  /** The notch, rounded corners and home bar the page keeps clear of, in CSS pixels. */
+  safeArea: z.object({ top: Inset, right: Inset, bottom: Inset, left: Inset }),
+  /** Absent when the browser cannot tell; treated as the usual way up. */
+  turn: ScreenTurn.optional(),
+})
+export type ScreenReport = Omit<z.infer<typeof ScreenMessage>, 'type'>
+export type SafeArea = ScreenReport['safeArea']
+
+/**
+ * The widget board changed on this phone. The PC keeps it and passes it on to the other phones
+ * and the desktop editor.
+ */
+export const BoardSaveMessage = z.object({
+  type: z.literal('board.save'),
+  board: Board,
+})
 
 // WebRTC signaling rides the same socket; there is no STUN/TURN on a LAN, so a connection is
 // host candidates only. The PC sends the video, so the PC makes the offer and the phone answers.
@@ -106,6 +182,10 @@ export const PhoneMessage = z.discriminatedUnion('type', [
   HelloMessage,
   StreamRequestMessage,
   StreamStopMessage,
+  WidgetsSubscribeMessage,
+  MediaControlMessage,
+  ScreenMessage,
+  BoardSaveMessage,
   PhoneRtcSignalMessage,
   PingMessage,
   PongMessage,
@@ -140,6 +220,27 @@ export const StreamReadyMessage = z.object({
   size: Size,
 })
 
+/**
+ * The PC's real monitors, which the phone can duplicate. Sent after `welcome` and again
+ * whenever monitors are added, removed or change resolution. The virtual monitor is not listed.
+ */
+export const MonitorsMessage = z.object({
+  type: z.literal('monitors'),
+  monitors: z
+    .array(
+      z.object({
+        id: DisplayId,
+        name: z.string().max(128),
+        /** Physical pixels. */
+        width: Dimension,
+        height: Dimension,
+        primary: z.boolean(),
+      }),
+    )
+    .max(16),
+})
+export type MonitorInfo = z.infer<typeof MonitorsMessage>['monitors'][number]
+
 /** Fresh output from one widget collector. `data` is whatever the collector returned. */
 export const WidgetUpdateMessage = z.object({
   type: z.literal('widget.update'),
@@ -147,6 +248,16 @@ export const WidgetUpdateMessage = z.object({
   widgetId: z.string().min(1).max(64),
   data: z.json(),
   at: z.number(),
+})
+
+/**
+ * The widget board to show. Sent after `welcome`, then whenever the board changes on another
+ * phone or in the desktop editor. Null after `welcome` when the PC has no board yet: the phone
+ * then sends its own with `board.save`.
+ */
+export const BoardMessage = z.object({
+  type: z.literal('board'),
+  board: Board.nullable(),
 })
 
 export const ErrorCode = z.enum([
@@ -167,7 +278,9 @@ export const ErrorMessage = z.object({
 export const PcMessage = z.discriminatedUnion('type', [
   WelcomeMessage,
   StreamReadyMessage,
+  MonitorsMessage,
   WidgetUpdateMessage,
+  BoardMessage,
   PcRtcSignalMessage,
   ErrorMessage,
   PingMessage,

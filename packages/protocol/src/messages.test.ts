@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   encode,
   MAX_FRAME_BYTES,
+  type PcMessage,
   type PhoneMessage,
   parsePcMessage,
   parsePhoneMessage,
@@ -31,7 +32,22 @@ describe('phone messages', () => {
         quality: 'full',
         device: { viewport: { width: 800, height: 360 }, devicePixelRatio: 3 },
       },
+      {
+        type: 'stream.request',
+        size: { width: 1080, height: 1440 },
+        quality: 'full',
+        source: { kind: 'virtual' },
+      },
+      {
+        type: 'stream.request',
+        size: { width: 1080, height: 1440 },
+        quality: 'full',
+        source: { kind: 'mirror', displayId: '2528732444' },
+      },
       { type: 'stream.stop' },
+      { type: 'widgets.subscribe', widgets: ['pc-stats', 'media'] },
+      { type: 'widgets.subscribe', widgets: [] },
+      { type: 'media.control', action: 'play-pause' },
       { type: 'rtc.signal', session: 1, signal: { kind: 'answer', sdp: 'v=0' } },
       {
         type: 'rtc.signal',
@@ -200,5 +216,78 @@ describe('PC messages', () => {
 
   it('rejects phone-only messages', () => {
     expect(parsePcMessage(encode(hello())).ok).toBe(false)
+  })
+
+  it('lists the monitors the phone can duplicate', () => {
+    const message: PcMessage = {
+      type: 'monitors',
+      monitors: [
+        { id: '2528732444', name: 'Mi Monitor', width: 1920, height: 1080, primary: true },
+        { id: '1', name: '', width: 2560, height: 1440, primary: false },
+      ],
+    }
+    expect(parsePcMessage(encode(message))).toEqual({ ok: true, message })
+    expect(parsePcMessage(encode({ type: 'monitors', monitors: [] })).ok).toBe(true)
+  })
+
+  it('rejects a monitor whose id could be anything but an id', () => {
+    for (const id of ['', '../x', 'a b', 'x'.repeat(33)]) {
+      const frame = JSON.stringify({
+        type: 'monitors',
+        monitors: [{ id, name: 'x', width: 1920, height: 1080, primary: true }],
+      })
+      expect(parsePcMessage(frame).ok, id).toBe(false)
+    }
+  })
+})
+
+describe('monitor source, widgets and media', () => {
+  const request = (source: unknown) =>
+    JSON.stringify({
+      type: 'stream.request',
+      size: { width: 1080, height: 1440 },
+      quality: 'full',
+      source,
+    })
+
+  it('treats a request without a source as the virtual monitor', () => {
+    const parsed = parsePhoneMessage(
+      '{"type":"stream.request","size":{"width":1080,"height":1440},"quality":"full"}',
+    )
+    expect(parsed.ok && parsed.message.type === 'stream.request' && parsed.message.source).toBe(
+      undefined,
+    )
+  })
+
+  it('rejects a mirror source without a usable display id', () => {
+    for (const source of [
+      { kind: 'mirror' },
+      { kind: 'mirror', displayId: '' },
+      { kind: 'mirror', displayId: 'C:\\x' },
+      { kind: 'mirror', displayId: 5 },
+      { kind: 'window', displayId: '1' },
+    ]) {
+      expect(parsePhoneMessage(request(source)).ok, JSON.stringify(source)).toBe(false)
+    }
+  })
+
+  it('accepts only widget ids and only a bounded list of them', () => {
+    const subscribe = (widgets: unknown) => JSON.stringify({ type: 'widgets.subscribe', widgets })
+    expect(parsePhoneMessage(subscribe(['pc-stats'])).ok).toBe(true)
+    expect(parsePhoneMessage(subscribe(['PC-Stats'])).ok).toBe(false)
+    expect(parsePhoneMessage(subscribe(['../etc'])).ok).toBe(false)
+    expect(parsePhoneMessage(subscribe(Array.from({ length: 33 }, (_, i) => `w${i}`))).ok).toBe(
+      false,
+    )
+  })
+
+  it('accepts only the three media buttons', () => {
+    const control = (action: unknown) => JSON.stringify({ type: 'media.control', action })
+    for (const action of ['play-pause', 'next', 'previous']) {
+      expect(parsePhoneMessage(control(action)).ok, action).toBe(true)
+    }
+    for (const action of ['stop', 'volume-up', 'open calc', '']) {
+      expect(parsePhoneMessage(control(action)).ok, action).toBe(false)
+    }
   })
 })

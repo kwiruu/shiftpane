@@ -1,0 +1,109 @@
+/*
+ * The widget board's look: soft light and dark cards on black, big numbers with
+ * small units, and a few loud accents. Apple devices keep their own system font; everything
+ * else gets Inter, which is close to it.
+ *
+ * Import after Tailwind:  @import "tailwindcss"; @import "@shiftpane/board/board.css";
+ */
+@import "@fontsource-variable/inter";
+
+/* The board's components live in this package, outside the app Tailwind scans by default. */
+@source "./";
+
+@theme {
+  --font-board:
+    -apple-system, BlinkMacSystemFont, "Inter Variable", ui-sans-serif, system-ui, "Segoe UI",
+    Roboto, sans-serif;
+
+  --color-flame: oklch(0.67 0.22 37);
+  --color-lime: oklch(0.92 0.2 118);
+  --color-mint: oklch(0.75 0.2 148);
+  --color-sky: oklch(0.6 0.21 258);
+}
+
+/* Card colours come from the nearest `.tone-*` (a widget) or `.board` (the page around them). */
+@theme inline {
+  --color-board: var(--board);
+  --color-card: var(--card);
+  --color-card-ink: var(--card-ink);
+  --color-card-muted: var(--card-muted);
+  --color-card-line: var(--card-line);
+  --color-card-soft: var(--card-soft);
+  --color-card-pill: var(--card-pill);
+}
+
+.tone-light {
+  --card: oklch(1 0 0);
+  --card-ink: oklch(0.18 0.004 286);
+  --card-muted: oklch(0.6 0.008 286);
+  --card-line: oklch(0.92 0.003 286);
+  --card-soft: oklch(0.955 0.002 286);
+  --card-pill: oklch(1 0 0);
+  color-scheme: light;
+}
+
+.tone-dark,
+.board {
+  --card: oklch(0.21 0.004 286);
+  --card-ink: oklch(0.97 0.002 286);
+  --card-muted: oklch(0.66 0.01 286);
+  --card-line: oklch(0.3 0.005 286);
+  --card-soft: oklch(0.26 0.005 286);
+  --card-pill: oklch(0.4 0.006 286);
+  color-scheme: dark;
+}
+
+/* The page behind the widgets: black, like the phone's own standby screen. */
+.board {
+  --board: oklch(0 0 0);
+  --card: oklch(0.19 0.004 286);
+  font-family: var(--font-board);
+}
+
+/* The table pager scrolls with a finger or wheel but shows no scrollbar. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Now playing: three bars bouncing while music plays. */
+@keyframes equalize {
+  0%,
+  100% {
+    scale: 1 0.35;
+  }
+  50% {
+    scale: 1 1;
+  }
+}
+
+.equalizer > span {
+  transform-origin: bottom;
+  animation: equalize 0.9s ease-in-out infinite;
+}
+.equalizer > span:nth-child(2) {
+  animation-delay: -0.3s;
+}
+.equalizer > span:nth-child(3) {
+  animation-delay: -0.6s;
+}
+
+@keyframes sheet-in {
+  from {
+    translate: 0 1.5rem;
+    opacity: 0;
+  }
+}
+
+.sheet-in {
+  animation: sheet-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .equalizer > span,
+  .sheet-in {
+    animation: none;
+  }
+}
