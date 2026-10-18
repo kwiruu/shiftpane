@@ -1,11 +1,11 @@
 /*
  * The widget board's look: soft light and dark cards on black, big numbers with
  * small units, and a few loud accents. Apple devices keep their own system font; everything
- * else gets Inter, which is close to it.
+ * else gets Inter, which is close to it and comes with @shiftpane/ui's theme.
  *
- * Import after Tailwind:  @import "tailwindcss"; @import "@shiftpane/board/board.css";
+ * Import after the theme:
+ *   @import "tailwindcss"; @import "@shiftpane/ui/theme.css"; @import "@shiftpane/board/board.css";
  */
-@import "@fontsource-variable/inter";
 
 /* The board's components live in this package, outside the app Tailwind scans by default. */
 @source "./";

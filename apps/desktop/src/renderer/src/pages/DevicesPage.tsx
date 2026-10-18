@@ -1,37 +1,12 @@
 import { MAX_PHONES } from '@shiftpane/protocol'
-import type { ReactNode } from 'react'
+import { Icon } from '@shiftpane/ui/icons'
 import type { DisplayState } from '../../../shared/display.ts'
 import type { FirewallState } from '../../../shared/firewall.ts'
 import type { ConnectedPhone, PairingState } from '../../../shared/pairing.ts'
 import { DisplayNotice } from '../DisplayNotice.tsx'
 import { FirewallNotice } from '../FirewallNotice.tsx'
-import { ShellIcon } from '../shell/icons.tsx'
+import { Button, Card, Chip, Dot, type DotTone, Glyph, Select } from '../shell/parts.tsx'
 import { splitName } from '../splits.ts'
-
-/** A dark panel with a heading, the building block of every page. */
-export function Card({
-  title,
-  aside,
-  children,
-  className = '',
-}: {
-  title?: string
-  aside?: ReactNode
-  children: ReactNode
-  className?: string
-}) {
-  return (
-    <section className={`flex min-h-0 flex-col rounded-panel bg-surface p-5 ${className}`}>
-      {(title || aside) && (
-        <header className="mb-4 flex items-center justify-between gap-3">
-          {title && <h2 className="font-semibold">{title}</h2>}
-          {aside}
-        </header>
-      )}
-      {children}
-    </section>
-  )
-}
 
 /** The phone's screen in physical pixels, as it is now (or as it was when it paired). */
 function screenPixels(phone: ConnectedPhone): string {
@@ -40,13 +15,13 @@ function screenPixels(phone: ConnectedPhone): string {
   return `${Math.round(viewport.width * ratio)} × ${Math.round(viewport.height * ratio)}`
 }
 
-/** One line about the virtual monitor, for a card or a chip. */
+/** One line about the virtual monitor, under its size or state. */
 export function describeDisplay(display: DisplayState, phones: ConnectedPhone[]): string {
   switch (display.status) {
     case 'unknown':
       return 'Checking the display driver…'
     case 'idle':
-      return 'Ready. A monitor appears when a phone asks for one.'
+      return 'One appears when a phone asks for it.'
     case 'working':
       return display.size
         ? `Setting up a ${display.size.width} × ${display.size.height} monitor…`
@@ -60,6 +35,18 @@ export function describeDisplay(display: DisplayState, phones: ConnectedPhone[])
   }
 }
 
+/** The card's status chip, and its big line while there is no monitor size to show. */
+const DISPLAY_STATUS: Record<
+  DisplayState['status'],
+  { label: string; dot: DotTone; headline: string }
+> = {
+  unknown: { label: 'Checking', dot: 'off', headline: 'Checking…' },
+  idle: { label: 'Ready', dot: 'off', headline: 'No monitor' },
+  working: { label: 'Setting up', dot: 'busy', headline: 'Preparing' },
+  attached: { label: 'Streaming', dot: 'ok', headline: '' },
+  problem: { label: 'Needs a look', dot: 'warn', headline: 'Unavailable' },
+}
+
 /** The virtual monitor's state, with its notice when it needs the user. */
 export function DisplayCard({
   display,
@@ -68,21 +55,50 @@ export function DisplayCard({
   display: DisplayState
   phones: ConnectedPhone[]
 }) {
-  const tone =
-    display.status === 'attached'
-      ? 'bg-ok'
-      : display.status === 'problem'
-        ? 'bg-warn'
-        : display.status === 'working'
-          ? 'animate-pulse bg-warn'
-          : 'bg-ink-muted'
+  const status = DISPLAY_STATUS[display.status]
+  const notice = display.status === 'working' || display.status === 'problem'
+  const size =
+    display.status === 'attached' || display.status === 'working' ? display.size : undefined
+  return (
+    <Card
+      title="Virtual monitor"
+      icon="monitor"
+      aside={
+        <Chip className="gap-2">
+          <Dot tone={status.dot} className="size-1.5" />
+          {status.label}
+        </Chip>
+      }
+    >
+      <div className="flex items-center gap-4">
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-normal text-[2rem] leading-none tracking-tight tabular-nums">
+            {size ? `${size.width} × ${size.height}` : status.headline}
+          </p>
+          {!notice && (
+            <p className="mt-2.5 text-ink-muted text-sm">{describeDisplay(display, phones)}</p>
+          )}
+        </div>
+        <Glyph icon="monitor" />
+      </div>
+      {notice && (
+        <div className="mt-4">
+          <DisplayNotice state={display} />
+        </div>
+      )}
+    </Card>
+  )
 }
 
 function PairCard({ state, firewall }: { state: PairingState; firewall: FirewallState }) {
   if (state.status !== 'ready') {
     return (
-      <Card className="items-center justify-center text-center">
-        <p className={`font-semibold text-xl ${state.status === 'error' ? 'text-danger' : ''}`}>
+      <Card
+        title="Pair a phone"
+        icon="qr"
+        bodyClassName="items-center justify-center p-8 text-center"
+      >
+        <p className={`font-medium text-lg ${state.status === 'error' ? 'text-danger' : ''}`}>
           {state.status === 'error' ? "Can't pair right now" : 'Starting the local server…'}
         </p>
         {state.status === 'error' && (
@@ -101,16 +117,15 @@ function PairCard({ state, firewall }: { state: PairingState; firewall: Firewall
   return (
     <Card
       title="Pair a phone"
+      icon="qr"
       aside={
-        <button
-          type="button"
+        <Button
+          icon="refresh"
           onClick={() => void window.shiftpane.pairing.newCode()}
           title="Make a new code and disconnect every phone"
-          className="flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs transition hover:border-accent"
         >
-          <ShellIcon name="refresh" className="size-3.5" />
           New code
-        </button>
+        </Button>
       }
     >
       {firewall.status === 'blocked' && (
@@ -119,40 +134,45 @@ function PairCard({ state, firewall }: { state: PairingState; firewall: Firewall
         </div>
       )}
       <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8">
-        <img
-          src={`data:image/svg+xml;utf8,${encodeURIComponent(state.qrSvg)}`}
-          alt={`Pairing code for ${origin}`}
-          className="size-56 shrink-0 rounded-3xl bg-white p-4"
-        />
+        <div className="hatched rounded-[1.375rem] border border-border bg-surface p-2">
+          <img
+            src={`data:image/svg+xml;utf8,${encodeURIComponent(state.qrSvg)}`}
+            alt={`Pairing code for ${origin}`}
+            className="size-52 shrink-0 rounded-2xl bg-white p-3.5"
+          />
+        </div>
         <div className="w-full max-w-sm">
           <ol className="flex flex-col gap-3">
             {steps.map((step, index) => (
-              <li key={step} className="flex items-start gap-3 text-sm">
-                <span className="grid size-6 shrink-0 place-items-center rounded-full bg-surface-raised font-semibold text-xs tabular-nums">
+              <li key={step} className="flex items-center gap-3 text-sm">
+                <span className="raised grid size-6 shrink-0 place-items-center rounded-md font-mono text-[11px] text-ink-soft tabular-nums">
                   {index + 1}
                 </span>
-                <span className="pt-0.5 text-ink-muted">{step}</span>
+                <span className="text-ink-soft">{step}</span>
               </li>
             ))}
           </ol>
-          <div className="mt-5 text-sm">
+          <div className="mt-6">
             {state.hosts.length > 1 ? (
-              <label className="flex flex-col gap-1.5">
-                <span className="text-ink-muted text-xs">Network</span>
-                <select
+              <div className="flex flex-col gap-2">
+                <span className="section-label">Network</span>
+                <Select
+                  aria-label="Network"
+                  icon="network"
                   value={state.host}
                   onChange={(event) => void window.shiftpane.pairing.selectHost(event.target.value)}
-                  className="rounded-xl border border-border bg-surface-raised px-3 py-2 font-mono text-xs"
+                  className="w-full font-mono"
                 >
                   {state.hosts.map((host) => (
                     <option key={host.address} value={host.address}>
                       {host.address} ({host.interface})
                     </option>
                   ))}
-                </select>
-              </label>
+                </Select>
+              </div>
             ) : (
-              <p className="rounded-xl bg-surface-raised px-3 py-2 text-center font-mono text-ink-muted text-xs">
+              <p className="flex items-center justify-center gap-2 rounded-lg border border-border bg-surface px-3 py-2 font-mono text-ink-muted text-xs">
+                <Icon name="network" className="size-4" />
                 {origin}
               </p>
             )}
@@ -167,57 +187,61 @@ function PhonesCard({ phones, display }: { phones: ConnectedPhone[]; display: Di
   return (
     <Card
       title="Connected phones"
+      icon="devices"
       aside={
-        <span className="rounded-full bg-surface-raised px-2.5 py-1 font-semibold text-xs tabular-nums">
+        <Chip>
           {phones.length} / {MAX_PHONES}
-        </span>
+        </Chip>
       }
       className="flex-1"
+      bodyClassName="p-2"
     >
       {phones.length === 0 ? (
-        <div className="grid flex-1 place-items-center rounded-2xl border border-border border-dashed p-6 text-center">
+        <div className="grid flex-1 place-items-center p-6 text-center">
           <div>
-            <span className="mx-auto mb-3 grid size-11 place-items-center rounded-full bg-surface-raised text-ink-muted">
-              <ShellIcon name="qr" />
+            <span className="raised mx-auto mb-3 grid size-11 place-items-center rounded-xl text-ink-muted">
+              <Icon name="qr" className="size-5" />
             </span>
             <p className="font-medium text-sm">No phones yet</p>
             <p className="mt-1 text-ink-muted text-xs">Scan the code to connect one.</p>
           </div>
         </div>
       ) : (
-        <ul className="-mx-1 flex min-h-0 flex-col gap-2 overflow-y-auto px-1 [scrollbar-width:thin]">
+        <ul className="flex min-h-0 flex-col gap-1.5 overflow-y-auto [scrollbar-width:thin]">
           {phones.map((phone) => {
             const monitor =
               display.status === 'attached' && display.phoneId === phone.id ? display.size : null
             return (
               <li
                 key={phone.id}
-                className="flex items-center gap-3 rounded-2xl bg-surface-raised p-3"
+                className="flex items-center gap-3 rounded-[0.625rem] border border-border bg-surface/60 p-2.5"
               >
-                <span className="relative grid size-11 shrink-0 place-items-center rounded-full bg-surface text-ink">
-                  <ShellIcon name="devices" />
-                  <span className="absolute right-0.5 bottom-0.5 size-2.5 rounded-full bg-ok ring-2 ring-surface-raised" />
+                <span className="raised relative grid size-10 shrink-0 place-items-center rounded-lg text-ink-soft">
+                  <Icon name="phone" className="size-5" />
+                  <Dot tone="ok" className="absolute -top-0.5 -right-0.5 ring-2 ring-surface" />
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-sm">{phone.name}</p>
-                  <p className="truncate text-ink-muted text-xs tabular-nums">
+                  <p className="truncate font-mono text-[11px] text-ink-muted tabular-nums">
                     {screenPixels(phone)}
                     {phone.screen ? ` · ${splitName(phone.screen.monitorFraction)}` : ''} ·{' '}
                     {phone.address.replace(/^::ffff:/, '')}
                   </p>
                   {monitor && (
-                    <p className="mt-0.5 text-accent text-xs tabular-nums">
+                    <p className="mt-0.5 flex items-center gap-1.5 text-ok text-xs tabular-nums">
+                      <Icon name="monitor" className="size-3.5" />
                       Monitor {monitor.width} × {monitor.height}
                     </p>
                   )}
                 </div>
-                <button
-                  type="button"
+                <Button
+                  tone="ghost"
+                  icon="unlink"
                   onClick={() => void window.shiftpane.pairing.disconnect(phone.id)}
-                  className="rounded-full px-3 py-1.5 text-danger text-xs transition hover:bg-surface"
+                  className="hover:text-danger"
                 >
                   Disconnect
-                </button>
+                </Button>
               </li>
             )
           })}
@@ -239,9 +263,9 @@ export function DevicesPage({
 }) {
   const phones = pairing.status === 'ready' ? pairing.phones : []
   return (
-    <div className="grid h-full min-h-0 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-5">
+    <div className="grid h-full min-h-0 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-4">
       <PairCard state={pairing} firewall={firewall} />
-      <div className="flex min-h-0 flex-col gap-5">
+      <div className="flex min-h-0 flex-col gap-4">
         <PhonesCard phones={phones} display={display} />
         <DisplayCard display={display} phones={phones} />
       </div>

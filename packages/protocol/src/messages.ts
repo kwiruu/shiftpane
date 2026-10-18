@@ -260,6 +260,24 @@ export const BoardMessage = z.object({
   board: Board.nullable(),
 })
 
+/**
+ * The splits a phone offers, by the names its menu uses. `@shiftpane/layout`'s `SPLIT_PRESETS`
+ * has the same names (a phone test keeps the two in step); this package cannot import it.
+ */
+export const SplitName = z.enum(['monitor', '70-30', '50-50', 'widgets'])
+export type SplitName = z.infer<typeof SplitName>
+
+/**
+ * The desktop window picked a split for this phone. The phone switches to it and keeps it, then
+ * reports its screen as usual, so the editor's preview follows. It is sent by name, never as a
+ * share of the screen, so a phone only ever shows a split its own menu offers. A phone that
+ * predates this message drops it as unknown, which is why it did not bump `PROTOCOL_VERSION`.
+ */
+export const SplitSetMessage = z.object({
+  type: z.literal('split.set'),
+  split: SplitName,
+})
+
 export const ErrorCode = z.enum([
   'bad-message',
   'unauthorized',
@@ -281,6 +299,7 @@ export const PcMessage = z.discriminatedUnion('type', [
   MonitorsMessage,
   WidgetUpdateMessage,
   BoardMessage,
+  SplitSetMessage,
   PcRtcSignalMessage,
   ErrorMessage,
   PingMessage,

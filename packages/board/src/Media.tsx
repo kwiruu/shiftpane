@@ -1,5 +1,5 @@
 import type { MediaAction, MediaData } from '@shiftpane/protocol'
-import { Icon } from './icons.tsx'
+import { Icon } from '@shiftpane/ui/icons'
 import { fluid, Glow, Waiting } from './parts.tsx'
 import type { ElementSize } from './useElementSize.ts'
 

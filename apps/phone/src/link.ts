@@ -1,5 +1,5 @@
 import type { PcData } from '@shiftpane/board'
-import type { Board, PhoneMessage } from '@shiftpane/protocol'
+import type { Board, PhoneMessage, SplitName } from '@shiftpane/protocol'
 import type { ConnectionState } from './connection.ts'
 import * as demo from './demo.ts'
 import { DEMO } from './mode.ts'
@@ -14,6 +14,8 @@ interface PcLink {
   /** The widget board, as the PC last sent it. */
   useBoard(): Board
   sendToPc(message: PhoneMessage): boolean
+  /** Calls `listener` when the desktop window picks a split for this phone; returns an unsubscribe function. */
+  onPcSplit(listener: (split: SplitName) => void): () => void
   describeConnection(state: ConnectionState): {
     title: string
     detail: string
@@ -23,5 +25,12 @@ interface PcLink {
 
 const link: PcLink = DEMO ? demo : live
 
-export const { usePcConnection, usePcStream, usePcData, useBoard, sendToPc, describeConnection } =
-  link
+export const {
+  usePcConnection,
+  usePcStream,
+  usePcData,
+  useBoard,
+  sendToPc,
+  onPcSplit,
+  describeConnection,
+} = link

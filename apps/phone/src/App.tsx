@@ -1,9 +1,10 @@
 import { cropFor, isFlipped, pcWidgetsOn, screenLayout, WidgetBoard } from '@shiftpane/board'
-import { type Rect, SPLIT_PRESETS, type SplitLayout, type SplitPreset } from '@shiftpane/layout'
+import { type Rect, SPLIT_PRESETS, type SplitLayout } from '@shiftpane/layout'
 import { MonitorSource } from '@shiftpane/protocol'
 import { useEffect } from 'react'
 import {
   describeConnection,
+  onPcSplit,
   sendToPc,
   useBoard,
   usePcConnection,
@@ -12,8 +13,8 @@ import {
 } from './link.ts'
 import { Menu } from './Menu.tsx'
 import { MonitorView } from './MonitorView.tsx'
-import { DEMO } from './mode.ts'
 import { usePersistentState } from './persist.ts'
+import { parseSplit } from './split.ts'
 import { useSafeArea } from './useSafeArea.ts'
 import { useScreenReport } from './useScreenReport.ts'
 import { useScreenTurn } from './useScreenTurn.ts'
@@ -36,14 +37,6 @@ const NO_LAYOUT: SplitLayout = {
   monitorFraction: 0,
 }
 
-const parsePreset = (saved: unknown): SplitPreset =>
-  typeof saved === 'string' && saved in SPLIT_PRESETS
-    ? (saved as SplitPreset)
-    : // The demo has no monitor to show, so it opens on the widgets.
-      DEMO
-      ? 'widgets'
-      : '70-30'
-
 const parseSource = (saved: unknown): MonitorSource => {
   const parsed = MonitorSource.safeParse(saved)
   return parsed.success ? parsed.data : { kind: 'virtual' }
@@ -57,7 +50,9 @@ export function App() {
   const viewport = useViewport()
   const safeArea = useSafeArea()
   const turn = useScreenTurn()
-  const [preset, setPreset] = usePersistentState('split', parsePreset)
+  const [preset, setPreset] = usePersistentState('split', parseSplit)
+  // The desktop window can pick the split for this phone; it is kept like one picked here.
+  useEffect(() => onPcSplit(setPreset), [setPreset])
   const [chosenSource, setSource] = usePersistentState('source', parseSource)
   const board = useBoard()
   const connection = usePcConnection()

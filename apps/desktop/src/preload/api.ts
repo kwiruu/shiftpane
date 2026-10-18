@@ -1,4 +1,4 @@
-import type { Board } from '@shiftpane/protocol'
+import type { Board, SplitName } from '@shiftpane/protocol'
 import type { CaptureEvent } from '../shared/capture.ts'
 import type { DisplayState } from '../shared/display.ts'
 import type { FirewallAllowResult, FirewallState, SettingsPage } from '../shared/firewall.ts'
@@ -15,6 +15,8 @@ export interface ShiftPaneApi {
     selectHost(address: string): Promise<void>
     newCode(): Promise<void>
     disconnect(phoneId: string): Promise<void>
+    /** Switches one phone to a split (widgets only, 70 / 30, ...); the phone keeps it. */
+    setSplit(phoneId: string, split: SplitName): Promise<void>
   }
   /** Whether Windows Firewall lets phones reach the pairing server. Always "unknown" off Windows. */
   firewall: {

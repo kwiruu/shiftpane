@@ -45,6 +45,24 @@ describe('DEFAULT_BOARD', () => {
   it('is a valid board', () => {
     expect(Board.safeParse(DEFAULT_BOARD).success).toBe(true)
   })
+
+  it('is four one-row tables whose widgets all fit', () => {
+    expect(
+      DEFAULT_BOARD.tables.map((table) => ({
+        size: `${table.columns}x${table.rows}`,
+        widgets: table.widgets.map((item) => item.kind),
+      })),
+    ).toEqual([
+      { size: '2x1', widgets: ['calendar', 'cpu'] },
+      { size: '2x1', widgets: ['memory', 'analog-clock'] },
+      { size: '2x1', widgets: ['network'] },
+      { size: '2x1', widgets: ['pc-stats'] },
+    ])
+    for (const table of DEFAULT_BOARD.tables) {
+      expect(placeTable(table).overflow).toEqual([])
+      expect(placeTable(table).free).toEqual([])
+    }
+  })
 })
 
 describe('placeTable', () => {
@@ -212,7 +230,12 @@ describe('widgets', () => {
 
 describe('pcWidgetsOn', () => {
   it('lists the PC widgets the board shows, once each', () => {
-    expect(pcWidgetsOn(DEFAULT_BOARD)).toEqual(['media', 'pc-stats'])
+    // The default shows PC stats but no media player.
+    expect(pcWidgetsOn(DEFAULT_BOARD)).toEqual(['pc-stats'])
+    expect(pcWidgetsOn(addWidget(DEFAULT_BOARD, 'table-1', 'media').board)).toEqual([
+      'media',
+      'pc-stats',
+    ])
     expect(pcWidgetsOn(pair)).toEqual([])
   })
 })

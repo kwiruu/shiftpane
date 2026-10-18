@@ -1,5 +1,5 @@
 import { type PcData, PcDataStore } from '@shiftpane/board'
-import { type Board, parsePairingHash } from '@shiftpane/protocol'
+import { type Board, parsePairingHash, type SplitName } from '@shiftpane/protocol'
 import { useEffect, useSyncExternalStore } from 'react'
 import { BoardStore, useBoardStore } from './boardStore.ts'
 import {
@@ -27,8 +27,12 @@ const connection = new PcConnection({
     receiver.handle(message)
     pcData.handle(message)
     if (message.type === 'board') board.receive(message.board)
+    if (message.type === 'split.set') for (const listener of splitListeners) listener(message.split)
   },
 })
+
+// Who wants to hear that the desktop window picked a split for this phone.
+const splitListeners = new Set<(split: SplitName) => void>()
 
 // The widget board the PC lays out, kept on the phone to show before the PC answers.
 const board = new BoardStore({
@@ -88,6 +92,14 @@ export function usePcData(): PcData {
 /** The widget board, as the PC last sent it. */
 export function useBoard(): Board {
   return useBoardStore(board)
+}
+
+/** Calls `listener` when the desktop window picks a split for this phone; returns an unsubscribe function. */
+export function onPcSplit(listener: (split: SplitName) => void): () => void {
+  splitListeners.add(listener)
+  return () => {
+    splitListeners.delete(listener)
+  }
 }
 
 /** Sends one message to the PC; false when the socket is not connected right now. */

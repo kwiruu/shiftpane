@@ -3,7 +3,7 @@ import { LayoutEditor } from './layout/LayoutEditor.tsx'
 import { DevicesPage } from './pages/DevicesPage.tsx'
 import { MarketplacePage } from './pages/MarketplacePage.tsx'
 import { SettingsPage } from './pages/SettingsPage.tsx'
-import { Rail, type View } from './shell/Rail.tsx'
+import { Sidebar, type View } from './shell/Sidebar.tsx'
 import { TitleBar } from './shell/TitleBar.tsx'
 import { useBoard } from './useBoard.ts'
 import { useDisplay } from './useDisplay.ts'
@@ -30,31 +30,29 @@ export function App() {
 
   return (
     <div className="flex h-full bg-surface-sunken text-ink">
-      <Rail view={view} onView={setView} badges={{ devices: phones.length }} />
+      <Sidebar view={view} onView={setView} phones={phones} />
 
-      <div className="flex min-w-0 flex-1 flex-col py-3 pr-5 pl-4">
+      <div className="flex min-w-0 flex-1 flex-col">
         <TitleBar title={TITLES[view]} />
 
-        <div className="flex min-h-0 flex-1 flex-col pt-4 pb-1">
-          <main className="min-h-0 flex-1">
-            {view === 'devices' && (
-              <DevicesPage pairing={pairing} firewall={firewall} display={display} />
-            )}
-            {view === 'layout' && <LayoutEditor phones={phones} />}
-            {view === 'marketplace' && sampleUser && (
-              <Marketplace board={board} onChange={setBoard} />
-            )}
-            {view === 'settings' && (
-              <SettingsPage
-                pairing={pairing}
-                firewall={firewall}
-                display={display}
-                board={board}
-                onBoard={setBoard}
-              />
-            )}
-          </main>
-        </div>
+        <main className="min-h-0 flex-1 p-5">
+          {view === 'devices' && (
+            <DevicesPage pairing={pairing} firewall={firewall} display={display} />
+          )}
+          {view === 'layout' && <LayoutEditor phones={phones} />}
+          {view === 'marketplace' && sampleUser && (
+            <Marketplace board={board} onChange={setBoard} />
+          )}
+          {view === 'settings' && (
+            <SettingsPage
+              pairing={pairing}
+              firewall={firewall}
+              display={display}
+              board={board}
+              onBoard={setBoard}
+            />
+          )}
+        </main>
       </div>
     </div>
   )

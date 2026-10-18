@@ -45,14 +45,14 @@ export function MonitorView({ state, wanted, available }: MonitorViewProps) {
         className="size-full object-contain"
       />
       {!stream && (
-        <div className="absolute inset-3 grid place-items-center rounded-[28px] border-2 border-white/20 border-dashed p-6 text-center text-white">
+        <div className="hatched absolute inset-3 grid place-items-center rounded-[24px] border border-border p-6 text-center font-sans text-ink">
           <div>
-            <p className="font-semibold text-4xl tabular-nums tracking-tight">
+            <p className="font-light text-4xl tabular-nums tracking-tight">
               {wanted.width}
-              <span className="mx-1 text-white/40">×</span>
+              <span className="mx-1.5 text-ink-faint">×</span>
               {wanted.height}
             </p>
-            <p className="mt-2 text-sm text-white/60" role="status">
+            <p className="mt-3 font-mono text-ink-muted text-xs" role="status">
               {describe(state, available)}
             </p>
           </div>

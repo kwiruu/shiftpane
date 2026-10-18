@@ -10,7 +10,7 @@ export function TableThumb({ table, aspect }: { table: Table; aspect: number }) 
   return (
     <div
       aria-hidden
-      className="grid shrink-0 gap-[3px] rounded-md bg-black p-[3px]"
+      className="grid shrink-0 gap-[3px] rounded-md bg-black p-[3px] ring-1 ring-white/10"
       style={{
         width: Math.min(BOX.width, BOX.height * aspect),
         aspectRatio: aspect,

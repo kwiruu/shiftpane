@@ -106,37 +106,35 @@ export const DEFAULT_BOARD: Board = {
   gap: 12,
   radius: 28,
   crop: { portrait: NO_INSETS, landscape: NO_INSETS },
+  // Four tables of one row each: a pair of small widgets, another pair, then one wide widget
+  // apiece, so a phone scrolls through them one screenful at a time.
   tables: [
     {
       id: 'table-1',
       columns: 2,
       rows: 1,
-      widgets: [widget('calendar-1', 'calendar', 'light'), widget('clock-1', 'clock', 'dark')],
+      widgets: [widget('calendar-1', 'calendar', 'light'), widget('cpu-1', 'cpu', 'light')],
     },
     {
       id: 'table-2',
       columns: 2,
-      rows: 2,
+      rows: 1,
       widgets: [
-        widget('media-1', 'media', 'dark', 2),
-        widget('cpu-1', 'cpu', 'light'),
         widget('memory-1', 'memory', 'light'),
+        widget('analog-clock-1', 'analog-clock', 'light'),
       ],
     },
     {
       id: 'table-3',
       columns: 2,
-      rows: 2,
-      widgets: [
-        widget('pc-stats-1', 'pc-stats', 'light', 2),
-        widget('network-1', 'network', 'dark', 2),
-      ],
+      rows: 1,
+      widgets: [widget('network-1', 'network', 'dark', 2)],
     },
     {
       id: 'table-4',
-      columns: 1,
+      columns: 2,
       rows: 1,
-      widgets: [widget('analog-clock-1', 'analog-clock', 'light')],
+      widgets: [widget('pc-stats-1', 'pc-stats', 'light', 2)],
     },
   ],
 }

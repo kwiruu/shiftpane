@@ -1,7 +1,7 @@
 import type { PcStatsData } from '@shiftpane/protocol'
+import { Icon } from '@shiftpane/ui/icons'
 import type { StatsSample } from './data.ts'
 import { bytesParts, rateParts } from './format.ts'
-import { Icon } from './icons.tsx'
 import {
   clampPercent,
   fluid,

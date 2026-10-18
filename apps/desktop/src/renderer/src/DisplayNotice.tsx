@@ -1,5 +1,7 @@
+import { Icon } from '@shiftpane/ui/icons'
 import { type ReactNode, useState } from 'react'
 import type { DisplayProblemReason, DisplayState } from '../../shared/display.ts'
+import { Button } from './shell/parts.tsx'
 
 type Problem = Extract<DisplayState, { status: 'problem' }>
 type Working = Extract<DisplayState, { status: 'working' }>
@@ -19,16 +21,19 @@ function Progress({ state }: { state: Working }) {
   return (
     <div
       role="status"
-      className="w-full max-w-md rounded-xl border border-border bg-surface-raised p-4 text-left text-sm"
+      className="flex w-full gap-3 rounded-[0.625rem] border border-border bg-surface/60 p-3.5 text-left text-sm"
     >
-      <p className="font-semibold">
-        {size
-          ? `Setting up a ${size.width}×${size.height} monitor…`
-          : 'Getting monitor sizes ready…'}
-      </p>
-      <p className="mt-1 text-ink-muted">
-        If Windows asks for permission, approve it. It only asks when a new monitor size is added.
-      </p>
+      <span className="mt-1.5 size-2 shrink-0 animate-pulse rounded-full bg-warn" aria-hidden />
+      <div>
+        <p className="font-medium">
+          {size
+            ? `Setting up a ${size.width}×${size.height} monitor…`
+            : 'Getting monitor sizes ready…'}
+        </p>
+        <p className="mt-1 text-ink-muted">
+          If Windows asks for permission, approve it. It only asks when a new monitor size is added.
+        </p>
+      </div>
     </div>
   )
 }
@@ -49,22 +54,18 @@ function Trouble({ state }: { state: Problem }) {
   return (
     <div
       role="alert"
-      className="w-full max-w-md rounded-xl border border-warn/40 bg-warn/10 p-4 text-left text-sm"
+      className="flex w-full gap-3 rounded-[0.625rem] border border-warn/25 bg-warn/[0.06] p-3.5 text-left text-sm"
     >
-      <p className="font-semibold text-warn">{title}</p>
-      <p className="mt-1 text-ink-muted">{withCode(state.message)}</p>
-      {retry && (
-        <div className="mt-3">
-          <button
-            type="button"
-            disabled={pending}
-            onClick={tryAgain}
-            className="rounded-lg border border-border px-3 py-1 hover:border-accent disabled:opacity-60"
-          >
+      <Icon name="warning" className="size-5 text-warn" />
+      <div className="min-w-0">
+        <p className="font-medium text-warn">{title}</p>
+        <p className="mt-1 text-ink-muted">{withCode(state.message)}</p>
+        {retry && (
+          <Button icon="refresh" disabled={pending} onClick={tryAgain} className="mt-3">
             {pending ? 'Working…' : retry}
-          </button>
-        </div>
-      )}
+          </Button>
+        )}
+      </div>
     </div>
   )
 }
@@ -95,7 +96,10 @@ function withCode(message: string): ReactNode[] {
   return message.split(/`([^`]+)`/).map((part, index) =>
     index % 2 === 1 ? (
       // Odd entries are the captured spans. The parts never reorder, so the index is a stable key.
-      <code key={index} className="rounded bg-surface-sunken px-1 font-mono text-xs">
+      <code
+        key={index}
+        className="rounded border border-border bg-surface px-1 font-mono text-xs text-ink-soft"
+      >
         {part}
       </code>
     ) : (

@@ -2,18 +2,13 @@
 @import "@shiftpane/ui/theme.css";
 @import "@shiftpane/board/board.css";
 
-/* The window's own greys: the window behind, the panels on it, and one step above the panels. */
-@theme {
-  --color-surface-sunken: #181818;
-  --color-surface: #242424;
-  --color-surface-raised: #2e2e2e;
-  --color-border: #3a3a3a;
-
-  --radius-panel: 1.125rem;
-}
-
 html,
 body,
 #root {
   height: 100%;
+}
+
+/* Below this width the sidebar folds down to its icons, so the pages keep their room. */
+@theme {
+  --breakpoint-wide: 72rem;
 }

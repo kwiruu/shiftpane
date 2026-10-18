@@ -218,6 +218,25 @@ describe('PC messages', () => {
     expect(parsePcMessage(encode(hello())).ok).toBe(false)
   })
 
+  it('sets a phone to one of the splits it offers, by name', () => {
+    for (const split of ['monitor', '70-30', '50-50', 'widgets'] as const) {
+      const message: PcMessage = { type: 'split.set', split }
+      expect(parsePcMessage(encode(message))).toEqual({ ok: true, message })
+    }
+    // Names only: a share of the screen, a made-up preset or a missing split is refused.
+    for (const split of [0.5, '0.5', '60-40', 'WIDGETS', '', null, undefined]) {
+      expect(parsePcMessage(JSON.stringify({ type: 'split.set', split })).ok, String(split)).toBe(
+        false,
+      )
+    }
+  })
+
+  it('does not take a split from a phone', () => {
+    expect(parsePhoneMessage(JSON.stringify({ type: 'split.set', split: 'widgets' })).ok).toBe(
+      false,
+    )
+  })
+
   it('lists the monitors the phone can duplicate', () => {
     const message: PcMessage = {
       type: 'monitors',

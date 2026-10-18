@@ -1,6 +1,6 @@
 import { realpathSync } from 'node:fs'
 import { join } from 'node:path'
-import { Board } from '@shiftpane/protocol'
+import { Board, SplitName } from '@shiftpane/protocol'
 import {
   app,
   BrowserWindow,
@@ -88,7 +88,7 @@ function createWindow(): BrowserWindow {
     minHeight: 560,
     show: false,
     title: 'ShiftPane',
-    backgroundColor: '#181818',
+    backgroundColor: '#121214',
     // The window draws its own title bar and buttons; macOS keeps its traffic lights.
     ...(process.platform === 'darwin'
       ? { titleBarStyle: 'hiddenInset' as const, trafficLightPosition: { x: 18, y: 18 } }
@@ -245,6 +245,13 @@ function registerIpc(service: PairingService): void {
   })
   ipcMain.handle(IpcChannel.phonesDisconnect, (event, phoneId: unknown) => {
     if (fromMainWindow(event) && typeof phoneId === 'string') service.hub.disconnect(phoneId)
+  })
+  // A split is picked by name and checked like any frame before it goes to a phone.
+  ipcMain.handle(IpcChannel.phonesSetSplit, (event, phoneId: unknown, split: unknown) => {
+    const parsed = SplitName.safeParse(split)
+    if (fromMainWindow(event) && typeof phoneId === 'string' && parsed.success) {
+      service.hub.send(phoneId, { type: 'split.set', split: parsed.data })
+    }
   })
   service.on('change', (state) => mainWindow?.webContents.send(IpcChannel.pairingChanged, state))
 }

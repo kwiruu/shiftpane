@@ -1,59 +1,132 @@
 /*
  * ShiftPane design tokens (Tailwind v4, CSS-first).
  * Import after tailwindcss:  @import "tailwindcss"; @import "@shiftpane/ui/theme.css";
- * Dark is the default: the phone sits next to a monitor, often in a dim room.
+ *
+ * Graphite: near-black panels told apart by hairlines rather than fills, cards framed in fine
+ * diagonal lines, raised controls lit from above, and colour only where it means something
+ * (green for good, amber for attention, red for trouble). Dark is the default: the phone sits
+ * next to a monitor, often in a dim room.
  */
+@import "@fontsource-variable/inter";
+@import "@fontsource-variable/geist-mono";
+
+/* The icon component lives in this package, outside the app Tailwind scans by default. */
+@source "./";
 
 @theme {
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+  --font-sans:
+    "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
 
-  /* Near-black neutrals, panels a step lighter than the window, and one lime accent. */
-  --color-surface: oklch(0.195 0.003 286);
-  --color-surface-raised: oklch(0.245 0.004 286);
-  --color-surface-sunken: oklch(0.145 0.002 286);
-  --color-border: oklch(0.3 0.005 286);
-  --color-ink: oklch(0.97 0.002 286);
-  --color-ink-muted: oklch(0.68 0.008 286);
-  --color-accent: oklch(0.9 0.19 125);
-  --color-accent-ink: oklch(0.22 0.04 125);
-  --color-ok: oklch(0.82 0.19 145);
-  --color-warn: oklch(0.83 0.16 75);
-  --color-danger: oklch(0.68 0.21 27);
+  /* The window, the panels inside cards, and the controls raised off them. */
+  --color-surface-sunken: #121214;
+  --color-surface: #18181b;
+  --color-surface-raised: #242428;
+  --color-surface-lifted: #353539;
+  --color-border: #27272b;
+  --color-border-strong: #36363c;
+  --color-hatch: rgb(255 255 255 / 0.04);
 
-  --radius-panel: 1.5rem;
+  --color-ink: #f4f4f5;
+  --color-ink-soft: #c4c4ca;
+  --color-ink-muted: #85858e;
+  --color-ink-faint: #56565e;
+
+  /* The accent is plain light: the look is monochrome, and colour is kept for status. */
+  --color-accent: #ececef;
+  --color-accent-ink: #121214;
+  --color-ok: oklch(0.76 0.15 155);
+  --color-warn: oklch(0.83 0.14 78);
+  --color-danger: oklch(0.69 0.19 25);
+
+  --radius-panel: 1rem;
+  --radius-inner: 0.625rem;
 }
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
-    --color-surface: oklch(0.98 0.003 260);
-    --color-surface-raised: oklch(1 0 0);
-    --color-surface-sunken: oklch(0.94 0.005 260);
-    --color-border: oklch(0.86 0.008 260);
-    --color-ink: oklch(0.2 0.01 260);
-    --color-ink-muted: oklch(0.45 0.012 260);
-    --color-accent: oklch(0.55 0.14 200);
-    --color-accent-ink: oklch(0.98 0.01 200);
+    --color-surface-sunken: #f1f1f3;
+    --color-surface: #ffffff;
+    --color-surface-raised: #ffffff;
+    --color-surface-lifted: #ffffff;
+    --color-border: #e2e2e6;
+    --color-border-strong: #d2d2d8;
+    --color-hatch: rgb(0 0 0 / 0.05);
+    --color-ink: #18181b;
+    --color-ink-soft: #3a3a40;
+    --color-ink-muted: #6b6b74;
+    --color-ink-faint: #a1a1aa;
+    --color-accent: #18181b;
+    --color-accent-ink: #fafafa;
   }
 }
 
 :root[data-theme="light"] {
-  --color-surface: oklch(0.98 0.003 260);
-  --color-surface-raised: oklch(1 0 0);
-  --color-surface-sunken: oklch(0.94 0.005 260);
-  --color-border: oklch(0.86 0.008 260);
-  --color-ink: oklch(0.2 0.01 260);
-  --color-ink-muted: oklch(0.45 0.012 260);
-  --color-accent: oklch(0.55 0.14 200);
-  --color-accent-ink: oklch(0.98 0.01 200);
+  --color-surface-sunken: #f1f1f3;
+  --color-surface: #ffffff;
+  --color-surface-raised: #ffffff;
+  --color-surface-lifted: #ffffff;
+  --color-border: #e2e2e6;
+  --color-border-strong: #d2d2d8;
+  --color-hatch: rgb(0 0 0 / 0.05);
+  --color-ink: #18181b;
+  --color-ink-soft: #3a3a40;
+  --color-ink-muted: #6b6b74;
+  --color-ink-faint: #a1a1aa;
+  --color-accent: #18181b;
+  --color-accent-ink: #fafafa;
+}
+
+/* Fine diagonal lines, the texture of a card's frame around its inner panel. */
+@utility hatched {
+  background-image: repeating-linear-gradient(
+    135deg,
+    var(--color-hatch) 0 1px,
+    transparent 1px 9px
+  );
+}
+
+/* A control raised off its panel: lit along the top edge, with a dark rim and a soft shadow. */
+@utility raised {
+  background-color: var(--color-surface-raised);
+  background-image: linear-gradient(rgb(255 255 255 / 0.06), rgb(255 255 255 / 0.01));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.08),
+    0 0 0 1px rgb(0 0 0 / 0.5),
+    0 1px 2px rgb(0 0 0 / 0.35);
+}
+
+/* The chosen item in a list: a brighter, glossier version of `raised`. */
+@utility lifted {
+  background-color: var(--color-surface-lifted);
+  background-image: linear-gradient(rgb(255 255 255 / 0.09), rgb(255 255 255 / 0));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.13),
+    inset 0 -1px 0 rgb(0 0 0 / 0.25),
+    0 0 0 1px rgb(0 0 0 / 0.6),
+    0 4px 12px -2px rgb(0 0 0 / 0.6);
+}
+
+/* Small section labels, like "Main" over a list. */
+@utility section-label {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--text-xs--line-height);
+  color: var(--color-ink-muted);
+  letter-spacing: 0.01em;
 }
 
 @layer base {
   html {
     color-scheme: dark light;
-    background: var(--color-surface);
+    background: var(--color-surface-sunken);
     color: var(--color-ink);
     font-family: var(--font-sans);
     -webkit-font-smoothing: antialiased;
+    scrollbar-color: var(--color-border-strong) transparent;
+  }
+
+  ::selection {
+    background: rgb(255 255 255 / 0.2);
   }
 }

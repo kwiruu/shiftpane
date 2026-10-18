@@ -30,6 +30,10 @@ TypeScript, a Cargo workspace for the native helper. See README.md for the layou
   (typed in `apps/desktop/src/preload/api.ts`).
 - The main window is frameless on Windows and Linux (macOS keeps its traffic lights) and draws its own buttons. The
   title bar, page heading and logo are `-webkit-app-region: drag`; anything clickable inside them needs `no-drag`.
+- The look lives in `packages/ui`: graphite tokens and the `hatched`/`raised`/`lifted`/`section-label` utilities in
+  `theme.css`, and every icon via `<Icon>` from `@shiftpane/ui/icons` (Solar, Bold Duotone). Don't hand-draw icons:
+  name a Solar one in `packages/ui/scripts/icons.ts` and run `pnpm --filter @shiftpane/ui icons`. Desktop pages are
+  built from `Card`, `Button`, `Chip` and `Select` in `renderer/src/shell/parts.tsx`.
 
 ## Gotchas
 

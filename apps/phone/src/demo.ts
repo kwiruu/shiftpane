@@ -55,6 +55,11 @@ export function sendToPc(message: PhoneMessage): boolean {
   return true
 }
 
+/** There is no desktop window in demo mode to pick a split. */
+export function onPcSplit(): () => void {
+  return () => {}
+}
+
 export function describeConnection(_state: ConnectionState): {
   title: string
   detail: string
