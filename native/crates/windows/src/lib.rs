@@ -110,6 +110,8 @@ impl Default for VddBackend {
 }
 
 impl VddBackend {
+    // `live::Stats` holds the counter query on Windows but is a unit struct on other OSes.
+    #[allow(clippy::default_constructed_unit_structs)]
     pub fn new(settings_path: impl Into<PathBuf>) -> Self {
         Self {
             settings_path: settings_path.into(),
