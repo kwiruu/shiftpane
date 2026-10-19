@@ -57,9 +57,13 @@ jobs:
       - name: Helper starts and answers the handshake
         shell: bash
         run: |
+          # The version the helper must report, read from the Rust source so a bump cannot leave
+          # this check behind.
+          want=$(sed -n 's/^pub const PROTOCOL_VERSION: u32 = \([0-9]*\);$/\1/p' native/crates/core/src/protocol.rs)
+          test -n "$want"
           reply=$(echo '{"id":1,"method":"helper.hello"}' | cargo run --quiet --locked -p shiftpane-helper)
           echo "$reply"
-          echo "$reply" | grep -q '"protocolVersion":1'
+          echo "$reply" | grep -q "\"protocolVersion\":$want[,}]"
 
   package:
     name: Package desktop app (${{ matrix.os }})
