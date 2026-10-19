@@ -5,6 +5,8 @@ import { useEffect } from 'react'
 import {
   describeConnection,
   onPcSplit,
+  pairWithCode,
+  reconnect,
   sendToPc,
   useBoard,
   usePcConnection,
@@ -13,6 +15,7 @@ import {
 } from './link.ts'
 import { Menu } from './Menu.tsx'
 import { MonitorView } from './MonitorView.tsx'
+import { PairScreen } from './PairScreen.tsx'
 import { usePersistentState } from './persist.ts'
 import { parseSplit } from './split.ts'
 import { useSafeArea } from './useSafeArea.ts'
@@ -60,6 +63,8 @@ export function App() {
   const pcData = usePcData()
   const status = describeConnection(connection)
   const connected = connection.status === 'connected'
+  const checkingCode = connection.status === 'connecting' && connection.checkingCode === true
+  const disconnected = connection.status === 'rejected' && connection.reason === 'disconnected'
   const virtualAvailable = connected && connection.welcome.features.display
 
   // A duplicated monitor that is no longer there (unplugged) falls back to the virtual one.
@@ -128,6 +133,16 @@ export function App() {
         virtualAvailable={virtualAvailable}
         connected={connected}
       />
+
+      {(connection.status === 'unpaired' || checkingCode || disconnected) && (
+        <PairScreen
+          status={status}
+          checking={checkingCode}
+          disconnected={disconnected}
+          onCode={pairWithCode}
+          onReconnect={reconnect}
+        />
+      )}
     </main>
   )
 }

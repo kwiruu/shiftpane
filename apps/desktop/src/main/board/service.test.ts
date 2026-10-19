@@ -1,15 +1,13 @@
 import { EventEmitter } from 'node:events'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 import { DEFAULT_BOARD, setLook } from '@shiftpane/board/model'
 import type { Board, PcMessage, PhoneMessage } from '@shiftpane/protocol'
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { PhoneInfo } from '../server/phone-hub.ts'
-import { BoardService, type BoardStorage, fileStorage } from './service.ts'
+import { BoardService, type BoardStorage } from './service.ts'
 
 const phone = (id: string): PhoneInfo => ({
   id,
+  deviceId: `device-${id}`,
   name: id,
   address: '192.168.1.4',
   viewport: { width: 390, height: 844 },
@@ -120,21 +118,5 @@ describe('BoardService', () => {
     connect('a')
     await settle()
     expect(sent).toHaveLength(2)
-  })
-})
-
-describe('fileStorage', () => {
-  let dir = ''
-  afterEach(async () => {
-    if (dir) await rm(dir, { recursive: true, force: true })
-  })
-
-  it('reads nothing before the first save, then what was saved', async () => {
-    dir = await mkdtemp(join(tmpdir(), 'shiftpane-board-'))
-    const storage = fileStorage(join(dir, 'board.json'))
-    expect(await storage.read()).toBeNull()
-    await storage.write('{"a":1}')
-    expect(await storage.read()).toBe('{"a":1}')
-    expect(await readFile(join(dir, 'board.json'), 'utf8')).toBe('{"a":1}')
   })
 })

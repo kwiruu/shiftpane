@@ -2,7 +2,12 @@ import { MAX_PHONES } from '@shiftpane/protocol'
 import { Icon } from '@shiftpane/ui/icons'
 import type { DisplayState } from '../../../shared/display.ts'
 import type { FirewallState } from '../../../shared/firewall.ts'
-import type { ConnectedPhone, PairingState } from '../../../shared/pairing.ts'
+import type {
+  ConnectedPhone,
+  PairingCodeState,
+  PairingState,
+  RememberedPhone,
+} from '../../../shared/pairing.ts'
 import { DisplayNotice } from '../DisplayNotice.tsx'
 import { FirewallNotice } from '../FirewallNotice.tsx'
 import { Button, Card, Chip, Dot, type DotTone, Glyph, Select } from '../shell/parts.tsx'
@@ -90,6 +95,30 @@ export function DisplayCard({
   )
 }
 
+/** "123456" as "123 456", easier to read out and type. */
+const spaced = (digits: string) => `${digits.slice(0, 3)} ${digits.slice(3)}`
+
+/** The code to type on a phone that cannot use the QR code, like an app on an iPhone's home screen. */
+function TypedCode({ code }: { code: PairingCodeState }) {
+  return (
+    <div className="-mt-3 flex flex-col items-center gap-1.5 text-center">
+      <span className="section-label">Or type this code in the phone app</span>
+      <p
+        className={`font-mono text-[1.75rem] leading-none tracking-[0.18em] tabular-nums ${
+          code.locked ? 'text-ink-faint line-through' : ''
+        }`}
+      >
+        {spaced(code.digits)}
+      </p>
+      <p className={`text-xs ${code.locked ? 'text-danger' : 'text-ink-muted'}`}>
+        {code.locked
+          ? 'Too many wrong tries. Press New code for another.'
+          : 'For ShiftPane on a home screen. A new one comes every 10 minutes.'}
+      </p>
+    </div>
+  )
+}
+
 function PairCard({ state, firewall }: { state: PairingState; firewall: FirewallState }) {
   if (state.status !== 'ready') {
     return (
@@ -111,7 +140,7 @@ function PairCard({ state, firewall }: { state: PairingState; firewall: Firewall
   const origin = `https://${state.host}:${state.port}`
   const steps = [
     'Join the same Wi-Fi as this PC.',
-    "Scan the code with the phone's camera.",
+    "Scan the QR code with the phone's camera.",
     'Accept the certificate warning once; it is expected.',
   ]
   return (
@@ -122,7 +151,7 @@ function PairCard({ state, firewall }: { state: PairingState; firewall: Firewall
         <Button
           icon="refresh"
           onClick={() => void window.shiftpane.pairing.newCode()}
-          title="Make a new code and disconnect every phone"
+          title="Make a new QR code and pairing code. Paired phones stay connected."
         >
           New code
         </Button>
@@ -141,6 +170,7 @@ function PairCard({ state, firewall }: { state: PairingState; firewall: Firewall
             className="size-52 shrink-0 rounded-2xl bg-white p-3.5"
           />
         </div>
+        <TypedCode code={state.code} />
         <div className="w-full max-w-sm">
           <ol className="flex flex-col gap-3">
             {steps.map((step, index) => (
@@ -183,10 +213,36 @@ function PairCard({ state, firewall }: { state: PairingState; firewall: Firewall
   )
 }
 
-function PhonesCard({ phones, display }: { phones: ConnectedPhone[]; display: DisplayState }) {
+const lastSeen = (at: number) =>
+  new Date(at).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+
+function ForgetButton({ phone }: { phone: { deviceId: string; name: string } }) {
+  return (
+    <Button
+      tone="ghost"
+      icon="trash"
+      onClick={() => void window.shiftpane.pairing.forget(phone.deviceId)}
+      title={`Forget ${phone.name}: it has to pair again to connect`}
+      aria-label={`Forget ${phone.name}`}
+      className="hover:text-danger"
+    />
+  )
+}
+
+function PhonesCard({
+  phones,
+  remembered,
+  display,
+}: {
+  phones: ConnectedPhone[]
+  remembered: RememberedPhone[]
+  display: DisplayState
+}) {
+  const connected = new Set(phones.map((phone) => phone.deviceId))
+  const away = remembered.filter((phone) => !connected.has(phone.deviceId))
   return (
     <Card
-      title="Connected phones"
+      title="Phones"
       icon="devices"
       aside={
         <Chip>
@@ -196,7 +252,7 @@ function PhonesCard({ phones, display }: { phones: ConnectedPhone[]; display: Di
       className="flex-1"
       bodyClassName="p-2"
     >
-      {phones.length === 0 ? (
+      {phones.length === 0 && away.length === 0 ? (
         <div className="grid flex-1 place-items-center p-6 text-center">
           <div>
             <span className="raised mx-auto mb-3 grid size-11 place-items-center rounded-xl text-ink-muted">
@@ -238,13 +294,33 @@ function PhonesCard({ phones, display }: { phones: ConnectedPhone[]; display: Di
                   tone="ghost"
                   icon="unlink"
                   onClick={() => void window.shiftpane.pairing.disconnect(phone.id)}
+                  title="Disconnect for now; the phone stays paired"
                   className="hover:text-danger"
                 >
                   Disconnect
                 </Button>
+                <ForgetButton phone={phone} />
               </li>
             )
           })}
+          {away.map((phone) => (
+            <li
+              key={phone.deviceId}
+              className="flex items-center gap-3 rounded-[0.625rem] border border-border border-dashed p-2.5"
+            >
+              <span className="raised relative grid size-10 shrink-0 place-items-center rounded-lg text-ink-muted">
+                <Icon name="phone" className="size-5" />
+                <Dot tone="off" className="absolute -top-0.5 -right-0.5 ring-2 ring-surface" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium text-ink-soft text-sm">{phone.name}</p>
+                <p className="truncate text-[11px] text-ink-muted">
+                  Paired · last seen {lastSeen(phone.lastSeenAt)}
+                </p>
+              </div>
+              <ForgetButton phone={phone} />
+            </li>
+          ))}
         </ul>
       )}
     </Card>
@@ -262,11 +338,12 @@ export function DevicesPage({
   display: DisplayState
 }) {
   const phones = pairing.status === 'ready' ? pairing.phones : []
+  const remembered = pairing.status === 'ready' ? pairing.remembered : []
   return (
     <div className="grid h-full min-h-0 grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] gap-4">
       <PairCard state={pairing} firewall={firewall} />
       <div className="flex min-h-0 flex-col gap-4">
-        <PhonesCard phones={phones} display={display} />
+        <PhonesCard phones={phones} remembered={remembered} display={display} />
         <DisplayCard display={display} phones={phones} />
       </div>
     </div>

@@ -2,12 +2,19 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
 import { request } from 'node:https'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { CloseCode, generatePairingToken, type PcMessage } from '@shiftpane/protocol'
+import {
+  CloseCode,
+  DEFAULT_PORT,
+  generatePairingToken,
+  type PcMessage,
+  PROTOCOL_VERSION,
+  tokensEqual,
+} from '@shiftpane/protocol'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { WebSocket } from 'ws'
 import { createCertificate } from './certificate.ts'
 import { PhoneHub } from './phone-hub.ts'
-import { type LanServer, startLanServer } from './server.ts'
+import { candidatePorts, type LanServer, startLanServer } from './server.ts'
 
 const token = generatePairingToken()
 let server: LanServer
@@ -22,7 +29,10 @@ beforeAll(async () => {
   const tls = await createCertificate(['127.0.0.1'])
   ca = tls.cert
   hub = new PhoneHub({
-    token: () => token,
+    admit: (auth) =>
+      auth.kind === 'token' && tokensEqual(auth.token, token)
+        ? { ok: true, deviceId: 'device-1' }
+        : { ok: false, code: CloseCode.unauthorized, reason: 'pairing token rejected' },
     pc: { name: 'test', platform: 'linux' },
     features: () => ({ display: false, remoteControl: false }),
   })
@@ -61,8 +71,8 @@ const closed = (ws: WebSocket) =>
 const hello = (pairingToken: string) =>
   JSON.stringify({
     type: 'hello',
-    protocol: 1,
-    token: pairingToken,
+    protocol: PROTOCOL_VERSION,
+    auth: { kind: 'token', token: pairingToken },
     device: {
       name: 'test phone',
       viewport: { width: 400, height: 800 },
@@ -104,6 +114,24 @@ describe('LAN server', () => {
     expect(await closed(ws)).toBe(CloseCode.unauthorized)
   })
 
+  it('moves on when the port phones used last is taken', async () => {
+    const tls = await createCertificate(['127.0.0.1'])
+    const root = await mkdtemp(join(tmpdir(), 'shiftpane-www-'))
+    const other = await startLanServer({
+      tls,
+      staticRoot: root,
+      hub,
+      port: server.port,
+      host: '127.0.0.1',
+    })
+    try {
+      expect(other.port).not.toBe(server.port)
+      expect(other.port).toBeGreaterThan(0)
+    } finally {
+      await other.close()
+    }
+  })
+
   it('refuses upgrades from another origin or path', async () => {
     const foreign = connect({ origin: 'https://evil.example' })
     const error = await new Promise<Error>((resolve) => foreign.once('error', resolve))
@@ -112,5 +140,16 @@ describe('LAN server', () => {
     expect(
       (await new Promise<Error>((resolve) => wrongPath.once('error', resolve))).message,
     ).toMatch(/403/)
+  })
+})
+
+describe('candidatePorts', () => {
+  it('tries the last port, then the fixed range, then any free port', () => {
+    expect(candidatePorts()).toEqual([...Array.from({ length: 10 }, (_, i) => DEFAULT_PORT + i), 0])
+    expect(candidatePorts(50_000).slice(0, 2)).toEqual([50_000, DEFAULT_PORT])
+    expect(
+      candidatePorts(DEFAULT_PORT + 3).filter((port) => port === DEFAULT_PORT + 3),
+    ).toHaveLength(1)
+    expect(candidatePorts(0)).toEqual([0])
   })
 })

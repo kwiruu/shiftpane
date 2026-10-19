@@ -13,8 +13,12 @@ export interface ShiftPaneApi {
     /** Calls `listener` on every change; returns an unsubscribe function. */
     onChange(listener: (state: PairingState) => void): () => void
     selectHost(address: string): Promise<void>
+    /** Replaces the QR code and the pairing code; phones already paired stay connected. */
     newCode(): Promise<void>
+    /** Closes one connection; the phone keeps its key and can reconnect. */
     disconnect(phoneId: string): Promise<void>
+    /** Drops a paired phone's key (a `RememberedPhone`'s `deviceId`); it has to pair again. */
+    forget(deviceId: string): Promise<void>
     /** Switches one phone to a split (widgets only, 70 / 30, ...); the phone keeps it. */
     setSplit(phoneId: string, split: SplitName): Promise<void>
   }

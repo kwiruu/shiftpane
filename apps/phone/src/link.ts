@@ -1,5 +1,5 @@
 import type { PcData } from '@shiftpane/board'
-import type { Board, PhoneMessage, SplitName } from '@shiftpane/protocol'
+import type { Board, PairingCode, PhoneMessage, SplitName } from '@shiftpane/protocol'
 import type { ConnectionState } from './connection.ts'
 import * as demo from './demo.ts'
 import { DEMO } from './mode.ts'
@@ -9,6 +9,10 @@ import * as live from './usePcConnection.ts'
 /** What the UI needs from the PC; the real connection or, in demo mode, a pretend PC. */
 interface PcLink {
   usePcConnection(): ConnectionState
+  /** Pairs this phone with the code the desktop app shows. */
+  pairWithCode(code: PairingCode): void
+  /** Connects again after the PC disconnected this phone. */
+  reconnect(): void
   usePcStream(): StreamState
   usePcData(): PcData
   /** The widget board, as the PC last sent it. */
@@ -27,6 +31,8 @@ const link: PcLink = DEMO ? demo : live
 
 export const {
   usePcConnection,
+  pairWithCode,
+  reconnect,
   usePcStream,
   usePcData,
   useBoard,

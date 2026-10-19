@@ -1,5 +1,4 @@
 import { EventEmitter } from 'node:events'
-import { readFile, rename, writeFile } from 'node:fs/promises'
 import { Board, type PhoneMessage } from '@shiftpane/protocol'
 import type { PhoneHub, PhoneInfo } from '../server/phone-hub.ts'
 
@@ -131,24 +130,5 @@ export class BoardService extends EventEmitter<{ change: [Board | null, BoardSou
       .catch((error: unknown) =>
         this.#log(`could not save the board: ${error instanceof Error ? error.message : error}`),
       )
-  }
-}
-
-/** Keeps the board in a JSON file, replaced whole on each save so it is never half-written. */
-export function fileStorage(path: string): BoardStorage {
-  return {
-    read: async () => {
-      try {
-        return await readFile(path, 'utf8')
-      } catch (error) {
-        if ((error as NodeJS.ErrnoException).code === 'ENOENT') return null
-        throw error
-      }
-    },
-    write: async (json) => {
-      const temporary = `${path}.tmp`
-      await writeFile(temporary, json, 'utf8')
-      await rename(temporary, path)
-    },
   }
 }

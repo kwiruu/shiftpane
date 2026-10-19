@@ -22,6 +22,14 @@ export function save(key: string, value: unknown): void {
   }
 }
 
+export function remove(key: string): void {
+  try {
+    localStorage.removeItem(PREFIX + key)
+  } catch {
+    // Blocked: there was nothing saved to remove.
+  }
+}
+
 /**
  * State that survives a reload. `parse` turns whatever was saved (or undefined) into a valid
  * value, so a save from an older version can never break the page.

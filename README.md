@@ -85,6 +85,10 @@ it and the phone shows "Connected to <your PC>". If the PC has several network a
 pick the one your phone is on from the Network menu under the QR code. `pnpm dev:phone` runs the phone UI alone
 with hot reload, without pairing.
 
+A paired phone keeps a key and reconnects on its own, across reloads and PC restarts, until it is forgotten on the
+Devices page. ShiftPane added to an iPhone's home screen never sees the QR code's link (the camera opens it in Safari,
+whose storage it does not share), so it asks for the six-digit code shown under the QR code instead.
+
 | Command | What it does |
 | --- | --- |
 | `pnpm lint` | Biome over the whole repo |

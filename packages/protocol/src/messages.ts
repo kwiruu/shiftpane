@@ -8,10 +8,11 @@
 
 import { z } from 'zod'
 import { Board } from './board.ts'
-import { PairingToken } from './pairing.ts'
+import { PhoneAuth, SavedPairing } from './pairing.ts'
 import { MediaAction, WidgetId } from './widgets.ts'
 
-export const PROTOCOL_VERSION = 1
+/** 2: `hello` carries `auth` (token, code or saved key) instead of only a token. */
+export const PROTOCOL_VERSION = 2
 
 const Dimension = z.number().int().positive().max(16_384)
 const Size = z.object({ width: Dimension, height: Dimension })
@@ -41,7 +42,7 @@ export type MonitorSource = z.infer<typeof MonitorSource>
 export const HelloMessage = z.object({
   type: z.literal('hello'),
   protocol: z.literal(PROTOCOL_VERSION),
-  token: PairingToken,
+  auth: PhoneAuth,
   device: z.object({
     name: z.string().trim().min(1).max(64),
     /** CSS pixels. */
@@ -209,6 +210,11 @@ export const WelcomeMessage = z.object({
     display: z.boolean(),
     remoteControl: z.boolean(),
   }),
+  /**
+   * Present when this connection paired the phone, with a token or a code: the phone saves it
+   * and presents it in every `hello` after this one.
+   */
+  pairing: SavedPairing.optional(),
 })
 
 /**

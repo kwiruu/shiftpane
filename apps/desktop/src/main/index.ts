@@ -18,7 +18,7 @@ import {
   type SettingsPage,
 } from '../shared/firewall.ts'
 import { IpcChannel } from '../shared/pairing.ts'
-import { BoardService, EDITOR, fileStorage } from './board/service.ts'
+import { BoardService, EDITOR } from './board/service.ts'
 import {
   bindDisplayToHub,
   createDisplayController,
@@ -28,6 +28,7 @@ import {
 import { FirewallMonitor } from './firewall/monitor.ts'
 import { allowThroughFirewall, queryFirewall } from './firewall/powershell.ts'
 import { PairingService } from './pairing.ts'
+import { fileStorage } from './storage.ts'
 import { type StreamingService, startStreaming } from './stream/service.ts'
 import { startWidgets, type WidgetService } from './widgets/index.ts'
 
@@ -246,6 +247,9 @@ function registerIpc(service: PairingService): void {
   ipcMain.handle(IpcChannel.phonesDisconnect, (event, phoneId: unknown) => {
     if (fromMainWindow(event) && typeof phoneId === 'string') service.hub.disconnect(phoneId)
   })
+  ipcMain.handle(IpcChannel.phonesForget, (event, deviceId: unknown) => {
+    if (fromMainWindow(event) && typeof deviceId === 'string') service.forget(deviceId)
+  })
   // A split is picked by name and checked like any frame before it goes to a phone.
   ipcMain.handle(IpcChannel.phonesSetSplit, (event, phoneId: unknown, split: unknown) => {
     const parsed = SplitName.safeParse(split)
@@ -304,6 +308,7 @@ app.whenReady().then(() => {
       : join(app.getAppPath(), '../phone/dist'),
     platform,
     displayAvailable: () => controller.available,
+    log: (message) => console.info(`[pairing] ${message}`),
   })
   bindDisplayToHub(controller, pairing.hub)
   streaming = startStreaming({

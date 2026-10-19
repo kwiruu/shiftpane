@@ -29,6 +29,7 @@ const api: ShiftPaneApi = {
     newCode: () => ipcRenderer.invoke(IpcChannel.pairingNewCode) as Promise<void>,
     disconnect: (phoneId) =>
       ipcRenderer.invoke(IpcChannel.phonesDisconnect, phoneId) as Promise<void>,
+    forget: (deviceId) => ipcRenderer.invoke(IpcChannel.phonesForget, deviceId) as Promise<void>,
     setSplit: (phoneId, split) =>
       ipcRenderer.invoke(IpcChannel.phonesSetSplit, phoneId, split) as Promise<void>,
   },

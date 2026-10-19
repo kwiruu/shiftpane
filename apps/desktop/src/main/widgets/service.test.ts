@@ -6,6 +6,7 @@ import { type WidgetCollector, type WidgetData, WidgetService } from './service.
 
 const phone = (id: string): PhoneInfo => ({
   id,
+  deviceId: `device-${id}`,
   name: id,
   address: '192.168.1.4',
   viewport: { width: 390, height: 844 },

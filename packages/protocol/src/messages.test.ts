@@ -7,12 +7,17 @@ import {
   parsePcMessage,
   parsePhoneMessage,
 } from './messages.ts'
-import { generatePairingToken } from './pairing.ts'
+import { generateDeviceKey, generatePairingToken, type PairingCode } from './pairing.ts'
 
-const hello = (): Extract<PhoneMessage, { type: 'hello' }> => ({
+const hello = (
+  auth: Extract<PhoneMessage, { type: 'hello' }>['auth'] = {
+    kind: 'token',
+    token: generatePairingToken(),
+  },
+): Extract<PhoneMessage, { type: 'hello' }> => ({
   type: 'hello',
-  protocol: 1,
-  token: generatePairingToken(),
+  protocol: 2,
+  auth,
   device: {
     name: 'Pixel 9',
     viewport: { width: 800, height: 360 },
@@ -25,6 +30,8 @@ describe('phone messages', () => {
   it('round-trips every message type', () => {
     const messages: PhoneMessage[] = [
       hello(),
+      hello({ kind: 'code', code: '012345' as PairingCode }),
+      hello({ kind: 'key', deviceId: crypto.randomUUID(), key: generateDeviceKey() }),
       { type: 'stream.request', size: { width: 1440, height: 1080 }, quality: 'auto' },
       {
         type: 'stream.request',
@@ -61,15 +68,23 @@ describe('phone messages', () => {
     }
   })
 
-  it('rejects a hello with a short or missing token', () => {
-    const bad = { ...hello(), token: 'abc' }
-    expect(parsePhoneMessage(JSON.stringify(bad)).ok).toBe(false)
-    const { token: _, ...missing } = hello()
+  it('rejects a hello with a short token, a bad code or a short key', () => {
+    for (const auth of [
+      { kind: 'token', token: 'abc' },
+      { kind: 'code', code: '12345' },
+      { kind: 'code', code: '12345a' },
+      { kind: 'key', deviceId: crypto.randomUUID(), key: 'abc' },
+      { kind: 'key', deviceId: 'x', key: generateDeviceKey() },
+      { kind: 'password', password: 'hunter2' },
+    ]) {
+      expect(parsePhoneMessage(JSON.stringify({ ...hello(), auth })).ok, auth.kind).toBe(false)
+    }
+    const { auth: _, ...missing } = hello()
     expect(parsePhoneMessage(JSON.stringify(missing)).ok).toBe(false)
   })
 
   it('rejects a protocol mismatch', () => {
-    expect(parsePhoneMessage(JSON.stringify({ ...hello(), protocol: 2 })).ok).toBe(false)
+    expect(parsePhoneMessage(JSON.stringify({ ...hello(), protocol: 1 })).ok).toBe(false)
   })
 
   it('rejects unknown types, PC-only types and non-integer sizes', () => {
@@ -216,6 +231,24 @@ describe('PC messages', () => {
 
   it('rejects phone-only messages', () => {
     expect(parsePcMessage(encode(hello())).ok).toBe(false)
+  })
+
+  it('welcomes a phone with or without a new pairing for it to save', () => {
+    const welcome: PcMessage = {
+      type: 'welcome',
+      protocol: 2,
+      sessionId: 's1',
+      pc: { name: 'desk', platform: 'windows' },
+      features: { display: true, remoteControl: false },
+    }
+    expect(parsePcMessage(encode(welcome))).toEqual({ ok: true, message: welcome })
+    const paired = {
+      ...welcome,
+      pairing: { deviceId: crypto.randomUUID(), key: generateDeviceKey() },
+    }
+    expect(parsePcMessage(encode(paired))).toEqual({ ok: true, message: paired })
+    const weak = { ...welcome, pairing: { deviceId: crypto.randomUUID(), key: 'abc' } }
+    expect(parsePcMessage(JSON.stringify(weak)).ok).toBe(false)
   })
 
   it('sets a phone to one of the splits it offers, by name', () => {

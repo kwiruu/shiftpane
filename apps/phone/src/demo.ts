@@ -38,6 +38,11 @@ export function usePcConnection(): ConnectionState {
   return CONNECTED
 }
 
+/** The pretend PC is always connected; there is nothing to pair. */
+export function pairWithCode(): void {}
+
+export function reconnect(): void {}
+
 export function usePcStream(): StreamState {
   return IDLE_STREAM
 }

@@ -1,5 +1,12 @@
 import { type PcData, PcDataStore } from '@shiftpane/board'
-import { type Board, parsePairingHash, type SplitName } from '@shiftpane/protocol'
+import {
+  type Board,
+  type PairingCode,
+  type PhoneAuth,
+  parsePairingHash,
+  SavedPairing,
+  type SplitName,
+} from '@shiftpane/protocol'
 import { useEffect, useSyncExternalStore } from 'react'
 import { BoardStore, useBoardStore } from './boardStore.ts'
 import {
@@ -9,14 +16,26 @@ import {
   takePairingToken,
   websocketUrl,
 } from './connection.ts'
-import { load, save } from './persist.ts'
+import { load, remove, save } from './persist.ts'
 import { StreamReceiver, type StreamState } from './stream.ts'
 import { checkForUpdate } from './updates.ts'
+import { keepScreenOn } from './wakeLock.ts'
+
+// The key from an earlier pairing goes first: a phone that is already paired and scans the QR
+// code again stays the same phone on the PC. The token is only used when that key is refused.
+const saved = SavedPairing.safeParse(load('pairing'))
+const token = takePairingToken(parsePairingHash)
+const auth: PhoneAuth[] = [
+  ...(saved.success ? [{ kind: 'key' as const, ...saved.data }] : []),
+  ...(token ? [{ kind: 'token' as const, token }] : []),
+]
 
 // One connection per page; created at import so the token is stripped from the URL immediately.
 const connection = new PcConnection({
   url: websocketUrl(),
-  token: takePairingToken(parsePairingHash),
+  auth,
+  onPaired: (pairing) => save('pairing', pairing),
+  onForgotten: () => remove('pairing'),
   device: () => ({
     name: guessDeviceName(navigator.userAgent),
     viewport: { width: window.innerWidth, height: window.innerHeight },
@@ -57,10 +76,14 @@ const receiver = new StreamReceiver({
 let warmedUp = false
 let connected = false
 connection.subscribe(() => {
-  if (connection.getState().status !== 'connected') {
+  const state = connection.getState()
+  keepScreenOn(state.status === 'connected')
+  if (state.status !== 'connected') {
     connected = false
     receiver.reset()
     pcData.reset()
+    // The PC was updated; so is the phone app it serves, once the new copy is fetched.
+    if (state.status === 'rejected' && state.reason === 'protocol-mismatch') checkForUpdate()
     return
   }
   // Just (re)connected: the PC may have restarted with a newer phone app.
@@ -72,11 +95,30 @@ connection.subscribe(() => {
   }
 })
 
+// A phone suspends a page it is not showing (and a home screen app whenever it locks), which
+// kills the socket. Coming back, reconnect at once rather than when the backoff says.
+const resume = () => {
+  if (document.visibilityState === 'visible') connection.resume()
+}
+document.addEventListener('visibilitychange', resume)
+window.addEventListener('pageshow', resume)
+window.addEventListener('online', resume)
+
 export function usePcConnection(): ConnectionState {
   useEffect(() => {
     connection.start()
   }, [])
   return useSyncExternalStore(connection.subscribe, connection.getState)
+}
+
+/** Pairs this phone with the code the desktop app shows. */
+export function pairWithCode(code: PairingCode): void {
+  connection.pair(code)
+}
+
+/** Connects again after the PC disconnected this phone. */
+export function reconnect(): void {
+  connection.reconnect()
 }
 
 /** The PC's monitor video, as far as it has got. */
@@ -113,13 +155,22 @@ export function describeConnection(state: ConnectionState): {
   tone: 'ok' | 'wait' | 'bad'
 } {
   switch (state.status) {
-    case 'no-token':
+    case 'unpaired':
       return {
         title: 'Not paired',
-        detail: 'Scan the QR code in the ShiftPane desktop app.',
+        detail: {
+          none: 'Type the code shown in ShiftPane on your PC.',
+          'old-link': 'That QR code is out of date. Type the code shown under the new one.',
+          'wrong-code': "That code didn't work. Check it on your PC and try again.",
+          'code-locked': 'Too many wrong codes. Press New code on your PC, then type that one.',
+          forgotten: 'Your PC forgot this phone. Type the code on your PC to pair it again.',
+        }[state.problem ?? 'none'],
         tone: 'bad',
       }
     case 'connecting':
+      if (state.checkingCode) {
+        return { title: 'Checking the code…', detail: 'Talking to your PC.', tone: 'wait' }
+      }
       return {
         title: state.attempt === 0 ? 'Connecting…' : 'Reconnecting…',
         detail:
@@ -136,13 +187,12 @@ export function describeConnection(state: ConnectionState): {
       }
     case 'rejected':
       return {
-        title: state.reason === 'disconnected' ? 'Disconnected' : 'Pairing failed',
+        title: state.reason === 'disconnected' ? 'Disconnected' : "Can't connect",
         detail: {
-          unauthorized: 'This code has expired. Scan the new QR code on your PC.',
-          disconnected: 'This phone was disconnected from the PC. Scan the QR code to reconnect.',
+          disconnected: 'This phone was disconnected from the PC. It is still paired.',
           'protocol-mismatch':
             'The phone app and the desktop app are different versions. Update ShiftPane on the PC.',
-          'bad-hello': 'The PC refused the connection. Scan the QR code again.',
+          'bad-hello': 'The PC refused the connection. Reload this page and try again.',
         }[state.reason],
         tone: 'bad',
       }

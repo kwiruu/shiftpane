@@ -8,7 +8,10 @@ export interface LanHost {
 }
 
 export interface ConnectedPhone {
+  /** This connection; a phone that reconnects gets a new one. */
   id: string
+  /** The paired phone, the same on every connection: a `RememberedPhone`'s `deviceId`. */
+  deviceId: string
   name: string
   address: string
   viewport: { width: number; height: number }
@@ -16,6 +19,22 @@ export interface ConnectedPhone {
   connectedAt: number
   /** How the phone's screen is laid out now (size, split, safe area); null until it says. */
   screen: ScreenReport | null
+}
+
+/** A phone this PC paired, which it lets back in with its saved key until told to forget it. */
+export interface RememberedPhone {
+  deviceId: string
+  name: string
+  pairedAt: number
+  lastSeenAt: number
+}
+
+/** The six digits to type on a phone that cannot follow the QR code's link. */
+export interface PairingCodeState {
+  digits: string
+  expiresAt: number
+  /** Too many wrong tries: no code is taken until the next one. */
+  locked: boolean
 }
 
 export type PairingState =
@@ -31,7 +50,10 @@ export type PairingState =
       port: number
       /** SHA-256 fingerprint of the self-signed certificate, for the user to compare on the phone. */
       fingerprint: string
+      code: PairingCodeState
       phones: ConnectedPhone[]
+      /** Every paired phone, connected or not, most recently seen first. */
+      remembered: RememberedPhone[]
     }
 
 /** IPC channel names, so main and preload cannot drift apart. */
@@ -42,6 +64,7 @@ export const IpcChannel = {
   pairingNewCode: 'pairing:new-code',
   pairingChanged: 'pairing:changed',
   phonesDisconnect: 'phones:disconnect',
+  phonesForget: 'phones:forget',
   phonesSetSplit: 'phones:set-split',
   firewallGet: 'firewall:get',
   firewallChanged: 'firewall:changed',

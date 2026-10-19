@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { generatePairingToken, type PcMessage } from '@shiftpane/protocol'
+import { generatePairingToken, type PcMessage, PROTOCOL_VERSION } from '@shiftpane/protocol'
 import { describe, expect, it } from 'vitest'
 import { type PhoneConnection, PhoneHub } from '../server/phone-hub.ts'
 import { bindDisplayToHub, type DisplayBinding } from './hub.ts'
@@ -22,8 +22,8 @@ function pair(hub: PhoneHub, viewport = { width: 800, height: 360 }) {
   handlers.onMessage(
     JSON.stringify({
       type: 'hello',
-      protocol: 1,
-      token,
+      protocol: PROTOCOL_VERSION,
+      auth: { kind: 'token', token },
       device: { name: 'Pixel 9', viewport, devicePixelRatio: 3, touch: true },
     }),
   )
@@ -48,7 +48,7 @@ function fakeDisplay() {
 
 function makeHub() {
   return new PhoneHub({
-    token: () => token,
+    admit: () => ({ ok: true, deviceId: 'device-1' }),
     pc: { name: 'desk', platform: 'windows' },
     features: () => ({ display: true, remoteControl: false }),
   })

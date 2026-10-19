@@ -22,6 +22,7 @@ const display = (overrides: Partial<DisplayInfo> = {}): DisplayInfo => ({
 
 const phone = (id: string, address = '192.168.1.42'): PhoneInfo => ({
   id,
+  deviceId: `device-${id}`,
   name: id,
   address,
   viewport: { width: 800, height: 360 },

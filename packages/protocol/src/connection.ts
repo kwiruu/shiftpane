@@ -8,8 +8,15 @@
 /** WebSocket path on the desktop app's HTTPS server. */
 export const WS_PATH = '/ws'
 
-/** Default port; the desktop app falls back to a random free port if it is taken. */
+/**
+ * Default port. An app on the phone's home screen is tied to the address it was added from, so
+ * the desktop app keeps the port it used last and, when that is taken, tries the few after
+ * this one before settling for any free port.
+ */
 export const DEFAULT_PORT = 47_820
+
+/** How many ports from `DEFAULT_PORT` on the desktop app tries. */
+export const PORT_RANGE = 10
 
 /** The phone must send `hello` within this window or the socket is closed. */
 export const HELLO_TIMEOUT_MS = 5_000
@@ -22,8 +29,13 @@ export const CloseCode = {
   disconnected: 4000,
   /** First message was not a valid `hello`. */
   badHello: 4400,
-  /** Wrong pairing token: the desktop app restarted and showed a new QR code. */
+  /**
+   * Wrong token, code or key: the QR code was replaced, the code mistyped, or the PC was told
+   * to forget this phone.
+   */
   unauthorized: 4401,
+  /** Too many wrong codes; the PC takes none until it shows a new one. */
+  codeLocked: 4423,
   /** Phone and PC speak different protocol versions; one of them needs updating. */
   protocolMismatch: 4426,
   helloTimeout: 4408,
@@ -39,6 +51,7 @@ export function isRetryableClose(code: number): boolean {
   return !(
     code === CloseCode.disconnected ||
     code === CloseCode.unauthorized ||
+    code === CloseCode.codeLocked ||
     code === CloseCode.protocolMismatch ||
     code === CloseCode.badHello
   )

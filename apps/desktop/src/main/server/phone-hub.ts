@@ -6,11 +6,12 @@ import {
   HELLO_TIMEOUT_MS,
   MAX_PHONES,
   type PcMessage,
+  type PhoneAuth,
   type PhoneMessage,
   PROTOCOL_VERSION,
   parsePhoneMessage,
+  type SavedPairing,
   type ScreenReport,
-  tokensEqual,
 } from '@shiftpane/protocol'
 
 /** The transport the hub needs; the server adapts a `ws` socket to this. */
@@ -21,7 +22,10 @@ export interface PhoneConnection {
 }
 
 export interface PhoneInfo {
+  /** This connection; a phone that reconnects gets a new one. */
   id: string
+  /** The paired phone, the same on every connection. */
+  deviceId: string
   name: string
   address: string
   viewport: { width: number; height: number }
@@ -32,10 +36,21 @@ export interface PhoneInfo {
 }
 
 type Welcome = Extract<PcMessage, { type: 'welcome' }>
+type Hello = Extract<PhoneMessage, { type: 'hello' }>
+
+/** Whether a phone that said a valid `hello` may connect. */
+export type Admission =
+  | {
+      ok: true
+      deviceId: string
+      /** Set when this connection paired the phone; sent in `welcome` for the phone to save. */
+      pairing?: SavedPairing
+    }
+  | { ok: false; code: number; reason: string }
 
 export interface PhoneHubOptions {
-  /** Current pairing token. A getter, so rotating it revokes the old QR code. */
-  token: () => string
+  /** Checks the token, code or saved key a phone presents. Called once per connection. */
+  admit: (auth: PhoneAuth, device: Hello['device']) => Admission
   pc: Welcome['pc']
   features: () => Welcome['features']
   helloTimeoutMs?: number
@@ -64,12 +79,12 @@ interface Paired {
  * Owns every phone connection: enforces the pairing handshake, validates each frame,
  * answers pings and tells the rest of the app who is connected.
  *
- * A connection is anonymous until its first frame is a valid `hello` with the current
- * token; until then nothing else is processed and nothing is sent except the close.
+ * A connection is anonymous until its first frame is a valid `hello` that `admit` accepts;
+ * until then nothing else is processed and nothing is sent except the close.
  */
 export class PhoneHub extends EventEmitter<PhoneHubEvents> {
-  readonly #options: Required<Omit<PhoneHubOptions, 'pc' | 'token' | 'features'>> &
-    Pick<PhoneHubOptions, 'pc' | 'token' | 'features'>
+  readonly #options: Required<Omit<PhoneHubOptions, 'pc' | 'admit' | 'features'>> &
+    Pick<PhoneHubOptions, 'pc' | 'admit' | 'features'>
   readonly #paired = new Map<string, Paired>()
 
   constructor(options: PhoneHubOptions) {
@@ -119,11 +134,15 @@ export class PhoneHub extends EventEmitter<PhoneHubEvents> {
     }
   }
 
-  /** Closes one phone's connection (the Disconnect button). */
-  disconnect(id: string): boolean {
+  /** Closes one phone's connection: the Disconnect button, or Forget with `unauthorized`. */
+  disconnect(
+    id: string,
+    code: number = CloseCode.disconnected,
+    reason = 'disconnected from the PC',
+  ): boolean {
     const phone = this.#paired.get(id)
     if (!phone) return false
-    phone.connection.close(CloseCode.disconnected, 'disconnected from the PC')
+    phone.connection.close(code, reason)
     this.#paired.delete(id)
     this.#changed()
     return true
@@ -158,12 +177,14 @@ export class PhoneHub extends EventEmitter<PhoneHubEvents> {
       return null
     }
     const hello = parsed.message
-    if (!tokensEqual(hello.token, this.#options.token())) {
-      close(CloseCode.unauthorized, 'pairing token rejected')
-      return null
-    }
+    // Before admitting, so a pairing is never made for a phone that is then turned away.
     if (this.#paired.size >= this.#options.maxPhones) {
       close(CloseCode.tooManyPhones, 'too many phones connected')
+      return null
+    }
+    const admission = this.#options.admit(hello.auth, hello.device)
+    if (!admission.ok) {
+      close(admission.code, admission.reason)
       return null
     }
     const id = randomUUID()
@@ -171,6 +192,7 @@ export class PhoneHub extends EventEmitter<PhoneHubEvents> {
       connection,
       info: {
         id,
+        deviceId: admission.deviceId,
         name: hello.device.name,
         address: connection.remoteAddress,
         viewport: hello.device.viewport,
@@ -187,6 +209,7 @@ export class PhoneHub extends EventEmitter<PhoneHubEvents> {
         sessionId: id,
         pc: this.#options.pc,
         features: this.#options.features(),
+        ...(admission.pairing && { pairing: admission.pairing }),
       }),
     )
     this.#changed()
