@@ -117,14 +117,14 @@ export function Select({
 }: SelectHTMLAttributes<HTMLSelectElement> & { icon?: IconName }) {
   return (
     <span
-      className={`raised relative inline-flex h-8 min-w-0 items-center rounded-lg text-ink-soft transition hover:text-ink ${className}`}
+      className={`raised relative inline-flex h-8 min-w-0 items-center rounded-lg text-ink-soft transition hover:text-ink has-[select:disabled]:opacity-40 has-[select:disabled]:hover:text-ink-soft ${className}`}
     >
       {icon && (
         <Icon name={icon} className="pointer-events-none absolute left-2.5 size-4 text-ink-muted" />
       )}
       <select
         {...props}
-        className={`h-full w-full min-w-0 cursor-pointer appearance-none truncate rounded-lg bg-transparent pr-8 font-medium text-xs outline-none focus-visible:ring-2 focus-visible:ring-ink/50 [&>option]:bg-surface-raised ${
+        className={`h-full w-full min-w-0 cursor-pointer appearance-none truncate rounded-lg bg-transparent pr-8 font-medium text-xs outline-none focus-visible:ring-2 focus-visible:ring-ink/50 disabled:cursor-default [&>option]:bg-surface-raised ${
           icon ? 'pl-8' : 'pl-3'
         }`}
       >

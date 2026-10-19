@@ -1,6 +1,7 @@
 import { type PcData, PcDataStore } from '@shiftpane/board'
 import {
   type Board,
+  type MonitorSource,
   type PairingCode,
   type PhoneAuth,
   parsePairingHash,
@@ -47,11 +48,17 @@ const connection = new PcConnection({
     pcData.handle(message)
     if (message.type === 'board') board.receive(message.board)
     if (message.type === 'split.set') for (const listener of splitListeners) listener(message.split)
+    if (message.type === 'source.set') {
+      for (const listener of sourceListeners) listener(message.source)
+    }
   },
 })
 
 // Who wants to hear that the desktop window picked a split for this phone.
 const splitListeners = new Set<(split: SplitName) => void>()
+
+// And what its monitor area shows.
+const sourceListeners = new Set<(source: MonitorSource) => void>()
 
 // The widget board the PC lays out, kept on the phone to show before the PC answers.
 const board = new BoardStore({
@@ -134,6 +141,14 @@ export function usePcData(): PcData {
 /** The widget board, as the PC last sent it. */
 export function useBoard(): Board {
   return useBoardStore(board)
+}
+
+/** Calls `listener` when the desktop window picks what the monitor area shows; returns an unsubscribe function. */
+export function onPcSource(listener: (source: MonitorSource) => void): () => void {
+  sourceListeners.add(listener)
+  return () => {
+    sourceListeners.delete(listener)
+  }
 }
 
 /** Calls `listener` when the desktop window picks a split for this phone; returns an unsubscribe function. */

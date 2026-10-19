@@ -1,4 +1,4 @@
-import type { Board } from '@shiftpane/protocol'
+import type { Board, MonitorInfo } from '@shiftpane/protocol'
 import { contextBridge, type IpcRendererEvent, ipcRenderer } from 'electron'
 import type { CaptureEvent } from '../shared/capture.ts'
 import type { DisplayState } from '../shared/display.ts'
@@ -32,6 +32,16 @@ const api: ShiftPaneApi = {
     forget: (deviceId) => ipcRenderer.invoke(IpcChannel.phonesForget, deviceId) as Promise<void>,
     setSplit: (phoneId, split) =>
       ipcRenderer.invoke(IpcChannel.phonesSetSplit, phoneId, split) as Promise<void>,
+    setSource: (phoneId, source) =>
+      ipcRenderer.invoke(IpcChannel.phonesSetSource, phoneId, source) as Promise<void>,
+  },
+  monitors: {
+    get: () => ipcRenderer.invoke(IpcChannel.monitorsGet) as Promise<MonitorInfo[]>,
+    onChange: (listener) => {
+      const handler = (_event: IpcRendererEvent, monitors: MonitorInfo[]) => listener(monitors)
+      ipcRenderer.on(IpcChannel.monitorsChanged, handler)
+      return () => ipcRenderer.off(IpcChannel.monitorsChanged, handler)
+    },
   },
   firewall: {
     get: () => ipcRenderer.invoke(IpcChannel.firewallGet) as Promise<FirewallState>,

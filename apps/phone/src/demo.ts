@@ -65,6 +65,11 @@ export function onPcSplit(): () => void {
   return () => {}
 }
 
+/** There is no desktop window in demo mode to pick a source. */
+export function onPcSource(): () => void {
+  return () => {}
+}
+
 export function describeConnection(_state: ConnectionState): {
   title: string
   detail: string

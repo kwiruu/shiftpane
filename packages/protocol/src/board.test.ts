@@ -110,6 +110,18 @@ describe('screen', () => {
     expect(parsePhoneMessage(screen({ turn: 'sideways' })).ok).toBe(false)
   })
 
+  it('says what the monitor area shows, when the phone says', () => {
+    expect(parsePhoneMessage(screen()).ok).toBe(true)
+    expect(parsePhoneMessage(screen({ source: { kind: 'virtual' } })).ok).toBe(true)
+    expect(
+      parsePhoneMessage(screen({ source: { kind: 'mirror', displayId: '2528732444' } })).ok,
+    ).toBe(true)
+    expect(parsePhoneMessage(screen({ source: { kind: 'mirror', displayId: '../x' } })).ok).toBe(
+      false,
+    )
+    expect(parsePhoneMessage(screen({ source: { kind: 'camera' } })).ok).toBe(false)
+  })
+
   it('rejects a split or inset that cannot be', () => {
     expect(parsePhoneMessage(screen({ monitorFraction: 1.5 })).ok).toBe(false)
     expect(

@@ -1,5 +1,11 @@
 import type { PcData } from '@shiftpane/board'
-import type { Board, PairingCode, PhoneMessage, SplitName } from '@shiftpane/protocol'
+import type {
+  Board,
+  MonitorSource,
+  PairingCode,
+  PhoneMessage,
+  SplitName,
+} from '@shiftpane/protocol'
 import type { ConnectionState } from './connection.ts'
 import * as demo from './demo.ts'
 import { DEMO } from './mode.ts'
@@ -20,6 +26,8 @@ interface PcLink {
   sendToPc(message: PhoneMessage): boolean
   /** Calls `listener` when the desktop window picks a split for this phone; returns an unsubscribe function. */
   onPcSplit(listener: (split: SplitName) => void): () => void
+  /** Calls `listener` when the desktop window picks what the monitor area shows; returns an unsubscribe function. */
+  onPcSource(listener: (source: MonitorSource) => void): () => void
   describeConnection(state: ConnectionState): {
     title: string
     detail: string
@@ -38,5 +46,6 @@ export const {
   useBoard,
   sendToPc,
   onPcSplit,
+  onPcSource,
   describeConnection,
 } = link

@@ -1,3 +1,4 @@
+import type { MonitorInfo } from '@shiftpane/protocol'
 import {
   type BrowserWindow,
   type DesktopCapturerSource,
@@ -37,6 +38,12 @@ export interface StreamingService {
     permission: string,
     details: { isMainFrame: boolean; mediaTypes?: readonly string[] },
   ): boolean
+  /** The PC's real monitors a phone can copy, which the desktop window offers too. */
+  monitors: {
+    list(): MonitorInfo[]
+    /** Calls `listener` when the list changes; returns an unsubscribe function. */
+    onChange(listener: (monitors: MonitorInfo[]) => void): () => void
+  }
   stop(): void
 }
 
@@ -123,6 +130,13 @@ export function startStreaming(options: StreamingOptions): StreamingService {
   })
 
   return {
+    monitors: {
+      list: () => monitors.list,
+      onChange: (listener) => {
+        monitors.on('change', listener)
+        return () => monitors.off('change', listener)
+      },
+    },
     allowsCapture: (webContents, permission, details) => {
       const window = getWindow()
       return (
