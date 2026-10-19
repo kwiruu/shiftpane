@@ -98,6 +98,11 @@ fn dispatch(call: &Call, backend: &mut dyn DisplayBackend) -> Result<CallResult,
                 .map(|added| CallResult::Prepared { added })
         }
         Call::Detach => backend.detach().map(|()| CallResult::Detached),
+        Call::SystemStats => backend.system_stats().map(CallResult::SystemStats),
+        Call::MediaState => backend.media_state().map(CallResult::Media),
+        Call::MediaControl(params) => backend
+            .media_control(params.action)
+            .map(|()| CallResult::MediaControlled),
     }
 }
 

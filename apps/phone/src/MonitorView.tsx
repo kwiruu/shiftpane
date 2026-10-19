@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { DEMO } from './mode.ts'
 import type { StreamState } from './stream.ts'
 
 interface MonitorViewProps {
@@ -10,6 +11,7 @@ interface MonitorViewProps {
 }
 
 function describe(state: StreamState, available: boolean): string {
+  if (DEMO) return "In the real app, the PC's screen appears here."
   if (state.phase === 'failed') return state.message ?? 'The monitor stream stopped.'
   if (!available) return 'The PC has no virtual display ready. Install the driver on the PC.'
   if (state.phase === 'connecting') return 'Starting the monitor…'
@@ -43,12 +45,14 @@ export function MonitorView({ state, wanted, available }: MonitorViewProps) {
         className="size-full object-contain"
       />
       {!stream && (
-        <div className="absolute inset-0 grid place-items-center bg-surface p-4 text-center">
+        <div className="hatched absolute inset-3 grid place-items-center rounded-[24px] border border-border p-6 text-center font-sans text-ink">
           <div>
-            <p className="font-mono text-3xl text-accent tabular-nums">
-              {wanted.width}×{wanted.height}
+            <p className="font-light text-4xl tabular-nums tracking-tight">
+              {wanted.width}
+              <span className="mx-1.5 text-ink-faint">×</span>
+              {wanted.height}
             </p>
-            <p className="mt-1 text-ink-muted text-sm" role="status">
+            <p className="mt-3 font-mono text-ink-muted text-xs" role="status">
               {describe(state, available)}
             </p>
           </div>

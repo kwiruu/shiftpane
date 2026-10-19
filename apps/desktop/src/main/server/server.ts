@@ -1,6 +1,6 @@
 import { createServer, type Server } from 'node:https'
 import type { AddressInfo } from 'node:net'
-import { DEFAULT_PORT, MAX_FRAME_BYTES, WS_PATH } from '@shiftpane/protocol'
+import { DEFAULT_PORT, MAX_FRAME_BYTES, PORT_RANGE, WS_PATH } from '@shiftpane/protocol'
 import { WebSocket, WebSocketServer } from 'ws'
 import type { TlsCredentials } from './certificate.ts'
 import type { PhoneHub } from './phone-hub.ts'
@@ -11,7 +11,10 @@ export interface LanServerOptions {
   /** Directory holding the built phone app. */
   staticRoot: string
   hub: PhoneHub
-  /** Tried first; falls back to a free port when taken. */
+  /**
+   * Tried first (the port phones last used), then the ports from `DEFAULT_PORT` on, then any
+   * free port. 0 goes straight to a free port.
+   */
   port?: number
   host?: string
   /** How often to ping sockets; a socket that misses one ping is dropped (dead Wi-Fi). */
@@ -26,7 +29,7 @@ export interface LanServer {
 /**
  * The HTTPS server phones connect to: serves the phone app and upgrades `/ws` to the
  * WebSocket the PhoneHub authenticates. Listens on every interface so phones on the LAN
- * can reach it; the pairing token, not the network, is what grants access.
+ * can reach it; pairing, not the network, is what grants access.
  */
 export async function startLanServer(options: LanServerOptions): Promise<LanServer> {
   const serveStatic = createStaticHandler(options.staticRoot)
@@ -79,7 +82,7 @@ export async function startLanServer(options: LanServerOptions): Promise<LanServ
     })
   })
 
-  const port = await listen(server, options.port ?? DEFAULT_PORT, options.host ?? '0.0.0.0')
+  const port = await listen(server, candidatePorts(options.port), options.host ?? '0.0.0.0')
   return {
     port,
     close: () =>
@@ -94,7 +97,7 @@ export async function startLanServer(options: LanServerOptions): Promise<LanServ
 
 /** Browsers always send Origin on WebSocket upgrades; other pages must not open our socket. */
 function isSameOrigin(origin: string | undefined, host: string | undefined): boolean {
-  if (origin === undefined) return true // not a browser; the pairing token still applies
+  if (origin === undefined) return true // not a browser; the hello's auth still applies
   try {
     return new URL(origin).host === host
   } catch {
@@ -102,11 +105,22 @@ function isSameOrigin(origin: string | undefined, host: string | undefined): boo
   }
 }
 
-function listen(server: Server, port: number, host: string): Promise<number> {
+/**
+ * The ports to try, in order. A phone's home screen app is tied to one address, so a port that
+ * worked before, or failing that a predictable one, beats whatever is free.
+ */
+export function candidatePorts(preferred?: number): number[] {
+  if (preferred === 0) return [0]
+  const range = Array.from({ length: PORT_RANGE }, (_, i) => DEFAULT_PORT + i)
+  return [...new Set([...(preferred === undefined ? [] : [preferred]), ...range]), 0]
+}
+
+function listen(server: Server, ports: readonly number[], host: string): Promise<number> {
   return new Promise((resolve, reject) => {
+    let next = 0
     const onError = (error: NodeJS.ErrnoException) => {
-      if (error.code === 'EADDRINUSE' && port !== 0) {
-        server.listen(0, host)
+      if (error.code === 'EADDRINUSE' && next < ports.length) {
+        server.listen(ports[next++], host)
         return
       }
       reject(error)
@@ -116,6 +130,6 @@ function listen(server: Server, port: number, host: string): Promise<number> {
       server.off('error', onError)
       resolve((server.address() as AddressInfo).port)
     })
-    server.listen(port, host)
+    server.listen(ports[next++], host)
   })
 }

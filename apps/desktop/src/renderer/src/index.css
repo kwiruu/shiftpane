@@ -1,8 +1,14 @@
 @import "tailwindcss";
 @import "@shiftpane/ui/theme.css";
+@import "@shiftpane/board/board.css";
 
 html,
 body,
 #root {
   height: 100%;
+}
+
+/* Below this width the sidebar folds down to its icons, so the pages keep their room. */
+@theme {
+  --breakpoint-wide: 72rem;
 }

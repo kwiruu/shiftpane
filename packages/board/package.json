@@ -1,0 +1,31 @@
+{
+  "name": "@shiftpane/board",
+  "version": "0.0.0",
+  "private": true,
+  "description": "The widget board: tables of widgets, the built-in widgets and the board editor, shared by the phone and the desktop app",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./model": "./src/model.ts",
+    "./board.css": "./src/board.css"
+  },
+  "scripts": {
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@shiftpane/layout": "workspace:*",
+    "@shiftpane/protocol": "workspace:*",
+    "@shiftpane/ui": "workspace:*"
+  },
+  "peerDependencies": {
+    "react": "catalog:",
+    "tailwindcss": "catalog:"
+  },
+  "devDependencies": {
+    "@types/react": "catalog:",
+    "react": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

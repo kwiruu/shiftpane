@@ -19,6 +19,7 @@ apps/
 packages/
   protocol/           PC <-> phone WebSocket messages and pairing tokens (zod)
   layout/             Split-view math: phone size + split + pixel ratio -> monitor resolution
+  board/              Widget board: tables of widgets and the built-in widgets (React), for phone and desktop
   widget-sdk/         Widget manifest schema (+ generated JSON Schema) and defineCollector
   helper-client/      Typed client for the native helper; types generated from Rust
   ui/                 Tailwind v4 design tokens shared by both apps
@@ -83,6 +84,10 @@ Scan the QR code with a phone on the same Wi-Fi. The phone warns about the self-
 it and the phone shows "Connected to <your PC>". If the PC has several network adapters (VPN, WSL, VirtualBox),
 pick the one your phone is on from the Network menu under the QR code. `pnpm dev:phone` runs the phone UI alone
 with hot reload, without pairing.
+
+A paired phone keeps a key and reconnects on its own, across reloads and PC restarts, until it is forgotten on the
+Devices page. ShiftPane added to an iPhone's home screen never sees the QR code's link (the camera opens it in Safari,
+whose storage it does not share), so it asks for the six-digit code shown under the QR code instead.
 
 | Command | What it does |
 | --- | --- |

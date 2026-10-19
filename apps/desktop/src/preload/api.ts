@@ -1,3 +1,4 @@
+import type { Board, SplitName } from '@shiftpane/protocol'
 import type { CaptureEvent } from '../shared/capture.ts'
 import type { DisplayState } from '../shared/display.ts'
 import type { FirewallAllowResult, FirewallState, SettingsPage } from '../shared/firewall.ts'
@@ -12,8 +13,14 @@ export interface ShiftPaneApi {
     /** Calls `listener` on every change; returns an unsubscribe function. */
     onChange(listener: (state: PairingState) => void): () => void
     selectHost(address: string): Promise<void>
+    /** Replaces the QR code and the pairing code; phones already paired stay connected. */
     newCode(): Promise<void>
+    /** Closes one connection; the phone keeps its key and can reconnect. */
     disconnect(phoneId: string): Promise<void>
+    /** Drops a paired phone's key (a `RememberedPhone`'s `deviceId`); it has to pair again. */
+    forget(deviceId: string): Promise<void>
+    /** Switches one phone to a split (widgets only, 70 / 30, ...); the phone keeps it. */
+    setSplit(phoneId: string, split: SplitName): Promise<void>
   }
   /** Whether Windows Firewall lets phones reach the pairing server. Always "unknown" off Windows. */
   firewall: {
@@ -25,6 +32,26 @@ export interface ShiftPaneApi {
     /** Asks Windows (UAC prompt) to let phones on private networks reach ShiftPane. */
     allow(): Promise<FirewallAllowResult>
     openSettings(page: SettingsPage): Promise<void>
+  }
+  /**
+   * The phones' widget board, which the PC keeps. Null until a phone or the editor made one.
+   * A board set here goes to every connected phone.
+   */
+  board: {
+    get(): Promise<Board | null>
+    /** Calls `listener` on every change, from a phone or from here; returns an unsubscribe function. */
+    onChange(listener: (board: Board | null) => void): () => void
+    set(board: Board): Promise<void>
+  }
+  /** The window itself, for the title bar's own buttons (Windows and Linux draw no frame). */
+  window: {
+    minimize(): Promise<void>
+    /** Maximizes, or restores a maximized window. */
+    toggleMaximize(): Promise<void>
+    close(): Promise<void>
+    isMaximized(): Promise<boolean>
+    /** Calls `listener` when the window is maximized or restored; returns an unsubscribe function. */
+    onMaximizedChange(listener: (maximized: boolean) => void): () => void
   }
   /** The virtual monitor that follows the paired phone. */
   display: {

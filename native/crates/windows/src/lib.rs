@@ -25,7 +25,10 @@
 
 use std::path::{Path, PathBuf};
 
-use shiftpane_core::protocol::{BackendInfo, Capabilities, DisplayInfo, ErrorCode, HelperError};
+use shiftpane_core::protocol::{
+    BackendInfo, Capabilities, DisplayInfo, ErrorCode, HelperError, MediaAction, MediaState,
+    SystemStats,
+};
 use shiftpane_core::{DisplayBackend, Mode};
 
 pub mod plan;
@@ -36,16 +39,35 @@ pub mod elevated;
 #[cfg(windows)]
 mod live;
 #[cfg(windows)]
+mod media;
+#[cfg(windows)]
+mod stats;
+#[cfg(windows)]
 mod win32;
 
 /// Stand-ins so the crate still compiles on other OSes; the helper only builds this backend
 /// on Windows.
 #[cfg(not(windows))]
 mod live {
-    use super::{DisplayInfo, HelperError, Mode};
+    use super::{DisplayInfo, HelperError, MediaAction, MediaState, Mode, SystemStats};
 
     fn unsupported() -> HelperError {
         HelperError::unsupported("the Windows backend only runs on Windows")
+    }
+
+    #[derive(Debug, Default)]
+    pub struct Stats;
+
+    pub fn system_stats(_state: &mut Stats) -> Result<SystemStats, HelperError> {
+        Err(unsupported())
+    }
+
+    pub fn media_state() -> Result<MediaState, HelperError> {
+        Err(unsupported())
+    }
+
+    pub fn media_control(_action: MediaAction) -> Result<(), HelperError> {
+        Err(unsupported())
     }
 
     pub fn list_displays() -> Result<Vec<DisplayInfo>, HelperError> {
@@ -77,6 +99,8 @@ pub struct VddBackend {
     settings_path: PathBuf,
     /// Whether this process put the virtual display on the desktop (or resized it).
     attached: bool,
+    /// The performance counter query behind `system.stats`, opened on first use.
+    stats: live::Stats,
 }
 
 impl Default for VddBackend {
@@ -86,10 +110,13 @@ impl Default for VddBackend {
 }
 
 impl VddBackend {
+    // `live::Stats` holds the counter query on Windows but is a unit struct on other OSes.
+    #[allow(clippy::default_constructed_unit_structs)]
     pub fn new(settings_path: impl Into<PathBuf>) -> Self {
         Self {
             settings_path: settings_path.into(),
             attached: false,
+            stats: live::Stats::default(),
         }
     }
 
@@ -157,6 +184,20 @@ impl DisplayBackend for VddBackend {
         live::detach()?;
         self.attached = false;
         Ok(())
+    }
+
+    // Stats and media controls do not need the display driver, so they are not gated on it.
+
+    fn system_stats(&mut self) -> Result<SystemStats, HelperError> {
+        live::system_stats(&mut self.stats)
+    }
+
+    fn media_state(&mut self) -> Result<MediaState, HelperError> {
+        live::media_state()
+    }
+
+    fn media_control(&mut self, action: MediaAction) -> Result<(), HelperError> {
+        live::media_control(action)
     }
 }
 

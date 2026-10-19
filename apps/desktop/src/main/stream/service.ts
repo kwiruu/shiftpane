@@ -14,7 +14,8 @@ import type { DisplayController } from '../display/controller.ts'
 import type { PhoneHub } from '../server/phone-hub.ts'
 import { CaptureGate } from './gate.ts'
 import { type CaptureBridge, StreamManager } from './manager.ts'
-import { findCaptureSource } from './source.ts'
+import { MonitorAnnouncer } from './monitors.ts'
+import { findCaptureSource, findMirrorSource } from './source.ts'
 
 export interface StreamingOptions {
   display: DisplayController
@@ -40,8 +41,9 @@ export interface StreamingService {
 }
 
 /**
- * Streams the virtual monitor to the paired phone: finds its capture source, hands it to the
- * app window's capture page, and relays the WebRTC signaling between the page and the phone.
+ * Streams a monitor to the paired phone (the virtual one, or a copy of a real one): finds its
+ * capture source, hands it to the app window's capture page, and relays the WebRTC signaling
+ * between the page and the phone. Also keeps phones told which real monitors they can copy.
  */
 export function startStreaming(options: StreamingOptions): StreamingService {
   const { display, hub, session, getWindow, fromWindow } = options
@@ -98,6 +100,26 @@ export function startStreaming(options: StreamingOptions): StreamingService {
       const { source } = await findCaptureSource(info, screen, desktopCapturer, { log })
       gate.arm(source)
     },
+    armMirror: async (displayId) => {
+      gate.arm(await findMirrorSource(displayId, screen, desktopCapturer))
+    },
+  })
+
+  // The real monitors a phone can duplicate, kept current on every phone.
+  const monitors = new MonitorAnnouncer({
+    hub,
+    display,
+    screen,
+    watch: (onChange) => {
+      screen.on('display-added', onChange)
+      screen.on('display-removed', onChange)
+      screen.on('display-metrics-changed', onChange)
+      return () => {
+        screen.off('display-added', onChange)
+        screen.off('display-removed', onChange)
+        screen.off('display-metrics-changed', onChange)
+      }
+    },
   })
 
   return {
@@ -115,6 +137,7 @@ export function startStreaming(options: StreamingOptions): StreamingService {
     },
     stop: () => {
       manager.stop()
+      monitors.stop()
       gate.clear()
       ipcMain.off(IpcChannel.captureEvent, onEvent)
       session.setDisplayMediaRequestHandler(null)

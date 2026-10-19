@@ -22,11 +22,13 @@ const display = (overrides: Partial<DisplayInfo> = {}): DisplayInfo => ({
 
 const phone = (id: string, address = '192.168.1.42'): PhoneInfo => ({
   id,
+  deviceId: `device-${id}`,
   name: id,
   address,
   viewport: { width: 800, height: 360 },
   devicePixelRatio: 3,
   connectedAt: 0,
+  screen: null,
 })
 
 /** Lets a test hold an `arm` call open and decide how it ends. */
@@ -40,7 +42,10 @@ function deferred() {
   return { promise, resolve, reject }
 }
 
-function setup(arm: (display: DisplayInfo) => Promise<void> = async () => {}) {
+function setup(
+  arm: (display: DisplayInfo) => Promise<void> = async () => {},
+  armMirror?: (displayId: string) => Promise<void>,
+) {
   const displayEvents = new EventEmitter()
   const hubEvents = new EventEmitter()
   const sentToPhone: Array<{ id: string; message: PcMessage }> = []
@@ -74,6 +79,7 @@ function setup(arm: (display: DisplayInfo) => Promise<void> = async () => {}) {
       armed.push(info)
       await arm(info)
     },
+    ...(armMirror ? { armMirror } : {}),
   })
 
   return {
@@ -379,5 +385,134 @@ describe('StreamManager', () => {
       await settle()
       expect(t.commands).toHaveLength(2)
     })
+  })
+})
+
+describe('StreamManager: duplicating a real monitor', () => {
+  const mirror = (displayId: string): PhoneMessage => ({
+    type: 'stream.request',
+    size: { width: 1680, height: 1080 },
+    quality: 'full',
+    source: { kind: 'mirror', displayId },
+  })
+  const virtual: PhoneMessage = {
+    type: 'stream.request',
+    size: { width: 1680, height: 1080 },
+    quality: 'full',
+    source: { kind: 'virtual' },
+  }
+
+  function mirrorSetup(armMirror: (displayId: string) => Promise<void> = async () => {}) {
+    const mirrored: string[] = []
+    const t = setup(undefined, async (id) => {
+      mirrored.push(id)
+      await armMirror(id)
+    })
+    t.phones('a')
+    return { ...t, mirrored }
+  }
+
+  it('captures the chosen monitor and starts a session for the phone', async () => {
+    const t = mirrorSetup()
+    t.fromPhone('a', mirror('4027384433'))
+    await settle()
+    expect(t.mirrored).toEqual(['4027384433'])
+    expect(t.armed).toEqual([])
+    expect(t.commands).toEqual([{ type: 'start', session: 1 }])
+  })
+
+  it('swaps from the virtual monitor to the copy in the same session, and survives its removal', async () => {
+    const t = mirrorSetup()
+    t.attach('a')
+    await settle()
+    t.fromPhone('a', mirror('1'))
+    await settle()
+    // Choosing a copy removes the virtual monitor; that must not stop the copy.
+    t.detach('a')
+    await settle()
+    expect(t.commands).toEqual([
+      { type: 'start', session: 1 },
+      { type: 'recapture', session: 1 },
+    ])
+  })
+
+  it('does not capture again when the phone repeats the same request', async () => {
+    const t = mirrorSetup()
+    t.fromPhone('a', mirror('1'))
+    await settle()
+    t.fromPhone('a', mirror('1'))
+    await settle()
+    expect(t.mirrored).toEqual(['1'])
+    t.fromPhone('a', mirror('2'))
+    await settle()
+    expect(t.mirrored).toEqual(['1', '2'])
+    expect(t.commands).toEqual([
+      { type: 'start', session: 1 },
+      { type: 'recapture', session: 1 },
+    ])
+  })
+
+  it('ends the copy when the phone stops, or goes back to the virtual monitor', async () => {
+    const t = mirrorSetup()
+    t.fromPhone('a', mirror('1'))
+    await settle()
+    t.fromPhone('a', { type: 'stream.stop' })
+    t.fromPhone('a', mirror('1'))
+    await settle()
+    t.fromPhone('a', virtual)
+    t.attach('a')
+    await settle()
+    expect(t.commands).toEqual([
+      { type: 'start', session: 1 },
+      { type: 'stop', session: 1 },
+      { type: 'start', session: 2 },
+      { type: 'stop', session: 2 },
+      { type: 'start', session: 3 },
+    ])
+  })
+
+  it('ignores a virtual monitor that attaches after the phone chose a copy', async () => {
+    const t = mirrorSetup()
+    t.fromPhone('a', mirror('1'))
+    await settle()
+    t.attach('a')
+    await settle()
+    expect(t.armed).toEqual([])
+    expect(t.commands).toEqual([{ type: 'start', session: 1 }])
+  })
+
+  it('tells the phone when the monitor cannot be captured', async () => {
+    const t = mirrorSetup(async () => {
+      throw new Error('That monitor is no longer connected to the PC.')
+    })
+    t.fromPhone('a', mirror('9'))
+    await settle()
+    expect(t.commands).toEqual([])
+    expect(t.sentToPhone).toEqual([
+      {
+        id: 'a',
+        message: {
+          type: 'error',
+          code: 'display-unavailable',
+          message: 'That monitor is no longer connected to the PC.',
+        },
+      },
+    ])
+  })
+
+  it('refuses a copy when the PC has no way to capture one', async () => {
+    const t = setup()
+    t.phones('a')
+    t.fromPhone('a', mirror('1'))
+    await settle()
+    expect(t.sentToPhone[0]?.message).toMatchObject({ type: 'error', code: 'display-unavailable' })
+  })
+
+  it('forgets the choice when the phone leaves', async () => {
+    const t = mirrorSetup()
+    t.fromPhone('a', mirror('1'))
+    await settle()
+    t.phones()
+    expect(t.commands.at(-1)).toEqual({ type: 'stop', session: 1 })
   })
 })

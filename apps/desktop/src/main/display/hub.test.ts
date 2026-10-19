@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events'
-import { generatePairingToken, type PcMessage } from '@shiftpane/protocol'
+import { generatePairingToken, type PcMessage, PROTOCOL_VERSION } from '@shiftpane/protocol'
 import { describe, expect, it } from 'vitest'
 import { type PhoneConnection, PhoneHub } from '../server/phone-hub.ts'
 import { bindDisplayToHub, type DisplayBinding } from './hub.ts'
@@ -22,8 +22,8 @@ function pair(hub: PhoneHub, viewport = { width: 800, height: 360 }) {
   handlers.onMessage(
     JSON.stringify({
       type: 'hello',
-      protocol: 1,
-      token,
+      protocol: PROTOCOL_VERSION,
+      auth: { kind: 'token', token },
       device: { name: 'Pixel 9', viewport, devicePixelRatio: 3, touch: true },
     }),
   )
@@ -48,11 +48,41 @@ function fakeDisplay() {
 
 function makeHub() {
   return new PhoneHub({
-    token: () => token,
+    admit: () => ({ ok: true, deviceId: 'device-1' }),
     pc: { name: 'desk', platform: 'windows' },
     features: () => ({ display: true, remoteControl: false }),
   })
 }
+
+describe('bindDisplayToHub: duplicating a real monitor', () => {
+  it('removes the virtual monitor instead of sizing it when the phone asks for a copy', () => {
+    const hub = makeHub()
+    const { display, log } = fakeDisplay()
+    bindDisplayToHub(display, hub)
+    const { handlers } = pair(hub)
+    const id = hub.phones[0]?.id
+    handlers.onMessage(
+      JSON.stringify({
+        type: 'stream.request',
+        size: { width: 1680, height: 1080 },
+        quality: 'full',
+        source: { kind: 'mirror', displayId: '4027384433' },
+      }),
+    )
+    handlers.onMessage(
+      JSON.stringify({
+        type: 'stream.request',
+        size: { width: 1680, height: 1080 },
+        quality: 'full',
+        source: { kind: 'virtual' },
+      }),
+    )
+    expect(log.slice(1)).toEqual([
+      ['stop', id],
+      ['request', id, { width: 1680, height: 1080 }, undefined],
+    ])
+  })
+})
 
 describe('bindDisplayToHub', () => {
   it('tells the controller about a phone with the viewport it paired with', () => {

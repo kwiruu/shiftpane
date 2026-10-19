@@ -41,6 +41,27 @@ export class CaptureSourceError extends Error {
 const defaultSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
 /**
+ * The capture source of one of the PC's real monitors, named by Electron's `Display.id` (the
+ * `id` in the `monitors` list the phone chose from). The displays are listed first so Electron
+ * fills each source's `display_id`.
+ */
+export async function findMirrorSource<Source extends ScreenSource>(
+  displayId: string,
+  screen: Pick<ScreenModule, 'getAllDisplays'>,
+  capturer: ScreenCapturer<Source>,
+): Promise<Source> {
+  const display = screen.getAllDisplays().find((candidate) => String(candidate.id) === displayId)
+  if (!display) throw new CaptureSourceError('That monitor is no longer connected to the PC.')
+  const sources = await capturer.getSources({
+    types: ['screen'],
+    thumbnailSize: { width: 0, height: 0 },
+  })
+  const found = matchSource(display, sources)
+  if (!found.ok) throw new CaptureSourceError('Could not capture that monitor.')
+  return found.source
+}
+
+/**
  * The capture source for the virtual monitor the helper just attached.
  *
  * Windows applies the new mode before the helper returns, but Electron's display list follows a

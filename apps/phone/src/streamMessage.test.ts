@@ -18,6 +18,19 @@ describe('streamMessageFor', () => {
       size: { width: 1680, height: 1080 },
       quality: 'full',
       device: { viewport: { width: 800, height: 360 }, devicePixelRatio: 3 },
+      source: { kind: 'virtual' },
+    })
+    expect(parsePhoneMessage(encode(message))).toEqual({ ok: true, message })
+  })
+
+  it('asks for a copy of a real monitor when one is chosen', () => {
+    const message = streamMessageFor({ width: 1680, height: 1080 }, screen, {
+      kind: 'mirror',
+      displayId: '2528732444',
+    })
+    expect(message).toMatchObject({
+      type: 'stream.request',
+      source: { kind: 'mirror', displayId: '2528732444' },
     })
     expect(parsePhoneMessage(encode(message))).toEqual({ ok: true, message })
   })

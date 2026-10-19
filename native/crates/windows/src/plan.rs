@@ -4,8 +4,9 @@ use shiftpane_core::mode::{MAX_HEIGHT, MAX_PREPARE_SIZES, MAX_WIDTH, MIN_HEIGHT,
 
 /// How the driver's adapter is described in Windows (the INF's device description).
 pub const ADAPTER_DESCRIPTION: &str = "Virtual Display Driver";
-/// The monitor id the driver reports (`MONITOR\MTT1337\...`); used when the adapter string
-/// is localised or overridden.
+/// The monitor id the driver reports (`MONITOR\MTT1337\...`). Only used to spot the virtual
+/// monitor cloned onto another adapter's output, never to pick the output to change: when
+/// displays are duplicated, this monitor sits under the laptop's own output.
 pub const MONITOR_ID_MARK: &str = "MTT1337";
 
 /// How many sizes one elevated run may add: everything one `display.prepare` can list.
@@ -42,12 +43,19 @@ pub fn list_len_after(listed: &[(u32, u32)], wanted: &[(u32, u32)]) -> usize {
     all.len()
 }
 
-/// True for the display this backend drives, as opposed to the user's real monitors.
-pub fn is_virtual_display(adapter_description: &str, monitor_id: &str) -> bool {
+/// True for the output (GDI source) this backend drives, as opposed to the user's real
+/// monitors. Decided by the output's own adapter only: its description, or its device id
+/// (`Root\MttVDD`), which is not localised.
+pub fn is_virtual_display(adapter_description: &str, adapter_device_id: &str) -> bool {
     adapter_description
         .trim()
         .eq_ignore_ascii_case(ADAPTER_DESCRIPTION)
-        || monitor_id.to_ascii_uppercase().contains(MONITOR_ID_MARK)
+        || is_driver_hardware_id(adapter_device_id)
+}
+
+/// True for the virtual monitor's device id, wherever Windows shows it.
+pub fn is_virtual_monitor_id(monitor_id: &str) -> bool {
+    monitor_id.to_ascii_uppercase().contains(MONITOR_ID_MARK)
 }
 
 /// True for the `PnP` hardware id the driver's device node carries (`Root\MttVDD`).
@@ -68,6 +76,41 @@ pub fn missing_sizes(offered: &[(u32, u32, u32)], wanted: &[(u32, u32)]) -> Vec<
         }
     }
     missing
+}
+
+/// GPU load from the `\GPU Engine(*engtype_3D)\Utilization Percentage` counter's instances:
+/// the 3D engines are summed per adapter (instances name it with `luid_...`) and the busiest
+/// adapter is reported, which is close to what Task Manager shows. `None` when there are no
+/// samples to go on.
+pub fn gpu_percent(samples: &[(String, f64)]) -> Option<f64> {
+    let mut per_adapter: Vec<(&str, f64)> = Vec::new();
+    for (name, value) in samples {
+        let adapter = name.find("luid_").map_or(name.as_str(), |start| {
+            let rest = &name[start..];
+            &rest[..rest.find("_phys").unwrap_or(rest.len())]
+        });
+        match per_adapter.iter_mut().find(|(key, _)| *key == adapter) {
+            Some((_, total)) => *total += value,
+            None => per_adapter.push((adapter, *value)),
+        }
+    }
+    per_adapter
+        .into_iter()
+        .map(|(_, total)| total.clamp(0.0, 100.0))
+        .reduce(f64::max)
+}
+
+/// A readable app name from a media session's `SourceAppUserModelId`, e.g.
+/// `Spotify.exe` or `SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify` -> `Spotify`.
+pub fn app_name(app_user_model_id: &str) -> Option<String> {
+    let id = app_user_model_id.trim();
+    let after_bang = id.rsplit('!').next().unwrap_or(id);
+    let without_exe = after_bang
+        .strip_suffix(".exe")
+        .or_else(|| after_bang.strip_suffix(".EXE"))
+        .unwrap_or(after_bang);
+    let last = without_exe.rsplit('.').next().unwrap_or(without_exe).trim();
+    (!last.is_empty()).then(|| last.to_owned())
 }
 
 /// The refresh rate to apply: the requested one when the driver offers it for this size,
@@ -132,15 +175,30 @@ mod tests {
     }
 
     #[test]
-    fn recognises_the_virtual_display_by_adapter_or_monitor_id() {
+    fn recognises_the_virtual_output_by_its_own_adapter() {
         assert!(is_virtual_display("Virtual Display Driver", ""));
         assert!(is_virtual_display(" virtual display driver ", ""));
+        // A localised or renamed description still has the driver's device id.
         assert!(is_virtual_display(
-            "Something else",
-            r"MONITOR\MTT1337\{4d36e96e-e325-11ce-bfc1-08002be10318}\0006"
+            "Pilote d'affichage virtuel",
+            r"Root\MttVDD"
         ));
         assert!(!is_virtual_display(
             "Intel(R) UHD Graphics",
+            r"PCI\VEN_8086&DEV_46A3&SUBSYS_3E7319E5&REV_0C"
+        ));
+    }
+
+    #[test]
+    fn never_takes_the_laptop_output_for_the_virtual_one_when_duplicating() {
+        // Measured: with displays duplicated, the virtual monitor's id is listed under the
+        // laptop's output (\\.\DISPLAY1). Picking that output resized the laptop's screen.
+        let intel = r"PCI\VEN_8086&DEV_46A3&SUBSYS_3E7319E5&REV_0C";
+        assert!(!is_virtual_display("Intel(R) UHD Graphics", intel));
+        assert!(is_virtual_monitor_id(
+            r"MONITOR\MTT1337\{4d36e96e-e325-11ce-bfc1-08002be10318}\0006"
+        ));
+        assert!(!is_virtual_monitor_id(
             r"MONITOR\BOE0BB2\{4d36e96e-e325-11ce-bfc1-08002be10318}\0004"
         ));
     }
@@ -172,6 +230,37 @@ mod tests {
             .collect();
         assert_eq!(list_len_after(&full, &[]), MAX_LISTED_RESOLUTIONS);
         assert!(list_len_after(&full, &[(1000, 1000)]) > MAX_LISTED_RESOLUTIONS);
+    }
+
+    #[test]
+    fn sums_3d_engines_per_adapter_and_reports_the_busiest() {
+        let sample = |name: &str, value: f64| (name.to_owned(), value);
+        let samples = [
+            sample("pid_1_luid_0x0_0xA_phys_0_eng_0_engtype_3D", 20.0),
+            sample("pid_2_luid_0x0_0xA_phys_0_eng_0_engtype_3D", 15.0),
+            sample("pid_3_luid_0x0_0xB_phys_0_eng_0_engtype_3D", 30.0),
+        ];
+        assert_eq!(gpu_percent(&samples), Some(35.0));
+        assert_eq!(
+            gpu_percent(&[sample("luid_0x0_0xA_phys_0", 180.0)]),
+            Some(100.0)
+        );
+        assert_eq!(gpu_percent(&[]), None);
+    }
+
+    #[test]
+    fn makes_app_names_readable() {
+        assert_eq!(app_name("Spotify.exe").as_deref(), Some("Spotify"));
+        assert_eq!(
+            app_name("SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify").as_deref(),
+            Some("Spotify")
+        );
+        assert_eq!(
+            app_name("Microsoft.ZuneMusic_8wekyb3d8bbwe!Microsoft.ZuneMusic").as_deref(),
+            Some("ZuneMusic")
+        );
+        assert_eq!(app_name("Chrome").as_deref(), Some("Chrome"));
+        assert_eq!(app_name("  "), None);
     }
 
     #[test]
