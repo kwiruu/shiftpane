@@ -1,5 +1,6 @@
+import { EventEmitter } from 'node:events'
 import type { DisplayInfo } from '@shiftpane/helper-client'
-import type { MonitorInfo } from '@shiftpane/protocol'
+import { type MonitorInfo, MonitorSource } from '@shiftpane/protocol'
 import type { DisplayController } from '../display/controller.ts'
 import type { PhoneHub, PhoneInfo } from '../server/phone-hub.ts'
 import type { Rect } from './match.ts'
@@ -42,6 +43,24 @@ export function listMonitors(screen: MonitorScreen, virtual: Rect | null): Monit
     }))
 }
 
+/**
+ * What the desktop window may tell a phone to show: the virtual monitor, or a copy of a monitor
+ * that is in `monitors` now. Anything else, including a copy of the virtual monitor (which is
+ * not listed) or of one that was unplugged, is refused with null.
+ */
+export function acceptSource(
+  source: unknown,
+  monitors: readonly MonitorInfo[],
+): MonitorSource | null {
+  const parsed = MonitorSource.safeParse(source)
+  if (!parsed.success) return null
+  const { data } = parsed
+  if (data.kind === 'mirror' && !monitors.some((monitor) => monitor.id === data.displayId)) {
+    return null
+  }
+  return data
+}
+
 export interface MonitorAnnouncerOptions {
   hub: Pick<PhoneHub, 'on' | 'off' | 'send' | 'phones'>
   display: Pick<DisplayController, 'on' | 'off'>
@@ -56,8 +75,11 @@ export interface MonitorAnnouncerOptions {
  * Keeps every phone's list of the PC's monitors current: a phone gets the list right after it
  * pairs, and all phones get it again when monitors change or the virtual monitor (which is
  * left out) comes and goes. Unchanged lists are not sent again.
+ *
+ * The desktop window shows the same list, to pick what a phone's monitor area shows: it reads
+ * `list` and hears `change` when the list changes.
  */
-export class MonitorAnnouncer {
+export class MonitorAnnouncer extends EventEmitter<{ change: [MonitorInfo[]] }> {
   readonly #options: MonitorAnnouncerOptions
   readonly #unhook: Array<() => void> = []
   readonly #told = new Set<string>()
@@ -66,6 +88,7 @@ export class MonitorAnnouncer {
   #timer: ReturnType<typeof setTimeout> | undefined
 
   constructor(options: MonitorAnnouncerOptions) {
+    super()
     this.#options = options
     const { hub, display } = options
 
@@ -99,6 +122,11 @@ export class MonitorAnnouncer {
     )
   }
 
+  /** The monitors a phone can copy, as they are now. */
+  get list(): MonitorInfo[] {
+    return listMonitors(this.#options.screen, this.#virtual)
+  }
+
   stop(): void {
     clearTimeout(this.#timer)
     for (const unhook of this.#unhook.splice(0)) unhook()
@@ -119,6 +147,7 @@ export class MonitorAnnouncer {
     const before = this.#last
     const list = this.#list()
     if (this.#last === before) return
+    this.emit('change', list)
     for (const phone of this.#options.hub.phones) {
       this.#told.add(phone.id)
       this.#options.hub.send(phone.id, { type: 'monitors', monitors: list })

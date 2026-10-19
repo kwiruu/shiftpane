@@ -4,6 +4,7 @@ import { MonitorSource } from '@shiftpane/protocol'
 import { useEffect } from 'react'
 import {
   describeConnection,
+  onPcSource,
   onPcSplit,
   pairWithCode,
   reconnect,
@@ -57,6 +58,8 @@ export function App() {
   // The desktop window can pick the split for this phone; it is kept like one picked here.
   useEffect(() => onPcSplit(setPreset), [setPreset])
   const [chosenSource, setSource] = usePersistentState('source', parseSource)
+  // The desktop window can pick it too, and it is kept like one picked from the menu.
+  useEffect(() => onPcSource(setSource), [setSource])
   const board = useBoard()
   const connection = usePcConnection()
   const stream = usePcStream()
@@ -91,7 +94,7 @@ export function App() {
   // Tell the PC which widgets need its data, again after every (re)connection.
   const sessionId = connected ? connection.welcome.sessionId : null
   // And how this screen is laid out, for the desktop editor's preview.
-  useScreenReport(sessionId, viewport, SPLIT_PRESETS[preset], safeArea, turn)
+  useScreenReport(sessionId, viewport, SPLIT_PRESETS[preset], safeArea, turn, source)
   const pcWidgets = pcWidgetsOn(board).join(',')
   useEffect(() => {
     if (sessionId === null) return

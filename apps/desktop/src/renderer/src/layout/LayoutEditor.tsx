@@ -12,12 +12,14 @@ import {
   setCrop,
 } from '@shiftpane/board'
 import { SPLIT_PRESETS, type SplitPreset } from '@shiftpane/layout'
-import type { ScreenTurn, WidgetKind } from '@shiftpane/protocol'
+import type { MonitorSource, ScreenTurn, WidgetKind } from '@shiftpane/protocol'
 import { useEffect, useRef, useState } from 'react'
 import type { ConnectedPhone } from '../../../shared/pairing.ts'
 import { Button, Card, Select } from '../shell/parts.tsx'
+import { monitorLabel, sameSource, sourceOfValue, sourceValue, VIRTUAL } from '../sources.ts'
 import { presetOf, SPLIT_LABELS, splitName } from '../splits.ts'
 import { useBoard } from '../useBoard.ts'
+import { useMonitors } from '../useMonitors.ts'
 import { useSampleData } from '../useSampleData.ts'
 import { PhonePreview } from './PhonePreview.tsx'
 import { type SendTarget, TablesPanel } from './TablesPanel.tsx'
@@ -39,6 +41,8 @@ interface Device {
   monitorFraction: number | null
   /** Which way up the phone is, so a crop for its camera follows it when turned round. */
   turn?: ScreenTurn
+  /** What its monitor area shows: the virtual monitor until the phone says otherwise. */
+  source: MonitorSource
 }
 
 /** The screen previewed before any phone has connected. */
@@ -49,7 +53,11 @@ const PRESET: Device = {
   height: 852,
   devicePixelRatio: 3,
   monitorFraction: null,
+  source: VIRTUAL,
 }
+
+/** How long a source just picked here is shown before the phone's own report takes over. */
+const PICK_SETTLE_MS = 3000
 
 /** Splits to preview, in the phone menu's order of how much is widgets. */
 const PICKABLE_SPLITS: SplitPreset[] = ['widgets', '70-30', '50-50', 'monitor']
@@ -68,6 +76,7 @@ function deviceOf(phone: ConnectedPhone): Device {
       height: phone.viewport.height,
       devicePixelRatio: phone.devicePixelRatio,
       monitorFraction: null,
+      source: VIRTUAL,
     }
   }
   return {
@@ -78,6 +87,7 @@ function deviceOf(phone: ConnectedPhone): Device {
     devicePixelRatio: screen.devicePixelRatio,
     monitorFraction: screen.monitorFraction,
     turn: screen.turn,
+    source: screen.source ?? VIRTUAL,
   }
 }
 
@@ -99,6 +109,10 @@ export function LayoutEditor({ phones }: { phones: ConnectedPhone[] }) {
   // With no phone connected it is only a preview. Null follows the phone, or widgets only
   // when there is no phone to follow.
   const [split, setSplit] = useState<SplitPreset | null>(null)
+  // The source just picked here, shown until the phone reports it (or does not, within a few
+  // seconds: a phone that cannot show a monitor stays on what it had). Null follows the phone.
+  const [source, setSource] = useState<MonitorSource | null>(null)
+  const monitors = useMonitors()
   // Where a widget dragged out of the picker would land, while it is being dragged.
   const [dropAt, setDropAt] = useState<DropAt | null>(null)
   // The row of the tables list a widget dragged off the preview is over, while it is.
@@ -135,6 +149,16 @@ export function LayoutEditor({ phones }: { phones: ConnectedPhone[] }) {
     if (split !== null && device.monitorFraction === SPLIT_PRESETS[split]) setSplit(null)
   }, [split, device.monitorFraction])
 
+  useEffect(() => {
+    if (source === null) return
+    if (sameSource(source, device.source)) {
+      setSource(null)
+      return
+    }
+    const timer = setTimeout(() => setSource(null), PICK_SETTLE_MS)
+    return () => clearTimeout(timer)
+  }, [source, device.source])
+
   if (!table) return null
 
   // A phone that reports its screen is shown at its size and rotation; anything else is turned
@@ -151,6 +175,14 @@ export function LayoutEditor({ phones }: { phones: ConnectedPhone[] }) {
   // What the split picker shows when nothing was just picked: the phone's own split.
   const splitValue =
     device.monitorFraction === null ? 'widgets' : (presetOf(device.monitorFraction) ?? PHONE_SPLIT)
+  // What the source picker shows: the one just picked, or the phone's own. A copy of a monitor
+  // that is not listed (yet, or any more) gets an entry of its own, so the picker never lies.
+  const shownSource = source ?? device.source
+  const unlisted =
+    shownSource.kind === 'mirror' &&
+    !monitors.some((monitor) => monitor.id === shownSource.displayId)
+  // Widgets only: the phone has no monitor area, so there is nothing to show in it.
+  const noMonitorArea = fraction === SPLIT_PRESETS.widgets
   // The phone's own layout math: the crop comes off the screen, then the monitor and the
   // widgets split the rest, so everything lands where the phone puts it.
   const laid = screenLayout({ width, height }, device.devicePixelRatio, fraction, crop)
@@ -267,6 +299,7 @@ export function LayoutEditor({ phones }: { phones: ConnectedPhone[] }) {
                 onChange={(event) => {
                   setChosen(event.target.value)
                   setSplit(null)
+                  setSource(null)
                 }}
                 className="max-w-44"
               >
@@ -279,7 +312,6 @@ export function LayoutEditor({ phones }: { phones: ConnectedPhone[] }) {
             )}
             <Select
               aria-label="Split"
-              icon="layout"
               title={
                 isPhone
                   ? `Switches ${device.label} to this split`
@@ -297,6 +329,7 @@ export function LayoutEditor({ phones }: { phones: ConnectedPhone[] }) {
                 // The phone switches, keeps it, and reports its screen: the preview then follows.
                 if (isPhone) void window.shiftpane.pairing.setSplit(device.id, next)
               }}
+              className="shrink-0"
             >
               {splitValue === PHONE_SPLIT && device.monitorFraction !== null && (
                 <option value={PHONE_SPLIT}>{splitName(device.monitorFraction)}</option>
@@ -307,7 +340,40 @@ export function LayoutEditor({ phones }: { phones: ConnectedPhone[] }) {
                 </option>
               ))}
             </Select>
-            {!follows && (
+            {/* Only with a phone: there is nothing on this PC for it to switch otherwise. */}
+            {isPhone && (
+              <Select
+                aria-label="Show"
+                disabled={noMonitorArea}
+                title={
+                  noMonitorArea
+                    ? `${device.label} is showing only widgets: it has no monitor area`
+                    : `Switches what ${device.label} shows in its monitor area`
+                }
+                value={sourceValue(shownSource)}
+                onChange={(event) => {
+                  const next = sourceOfValue(event.target.value)
+                  if (!next) return
+                  setSource(next)
+                  // The phone switches, keeps it, and reports its screen: the picker then follows.
+                  void window.shiftpane.pairing.setSource(device.id, next)
+                }}
+                className="max-w-44"
+              >
+                <option value={sourceValue(VIRTUAL)}>Extra monitor</option>
+                {monitors.map((monitor, index) => (
+                  <option
+                    key={monitor.id}
+                    value={sourceValue({ kind: 'mirror', displayId: monitor.id })}
+                  >
+                    {monitorLabel(monitor, index)}
+                  </option>
+                ))}
+                {unlisted && <option value={sourceValue(shownSource)}>Monitor gone</option>}
+              </Select>
+            )}
+            {/* A phone brings its own orientation, so this is for the preview alone. */}
+            {!isPhone && !follows && (
               <Button icon="rotate" onClick={() => setTurned(!turned)} title="Turn the preview">
                 <span className="max-wide:hidden">{width > height ? 'Landscape' : 'Portrait'}</span>
               </Button>

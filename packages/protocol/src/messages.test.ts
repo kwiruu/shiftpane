@@ -270,6 +270,35 @@ describe('PC messages', () => {
     )
   })
 
+  it('sets what a phone shows: the virtual monitor or a copy of a real one', () => {
+    for (const source of [
+      { kind: 'virtual' },
+      { kind: 'mirror', displayId: '2528732444' },
+    ] as const) {
+      const message: PcMessage = { type: 'source.set', source }
+      expect(parsePcMessage(encode(message))).toEqual({ ok: true, message })
+    }
+    // A made-up kind, a copy of nothing, or an id that could be anything but an id.
+    for (const source of [
+      { kind: 'camera' },
+      { kind: 'mirror' },
+      { kind: 'mirror', displayId: '../x' },
+      'virtual',
+      null,
+      undefined,
+    ]) {
+      expect(
+        parsePcMessage(JSON.stringify({ type: 'source.set', source })).ok,
+        JSON.stringify(source),
+      ).toBe(false)
+    }
+  })
+
+  it('does not take a source from a phone', () => {
+    const frame = JSON.stringify({ type: 'source.set', source: { kind: 'virtual' } })
+    expect(parsePhoneMessage(frame).ok).toBe(false)
+  })
+
   it('lists the monitors the phone can duplicate', () => {
     const message: PcMessage = {
       type: 'monitors',

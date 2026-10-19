@@ -1,4 +1,4 @@
-import type { Board, SplitName } from '@shiftpane/protocol'
+import type { Board, MonitorInfo, MonitorSource, SplitName } from '@shiftpane/protocol'
 import type { CaptureEvent } from '../shared/capture.ts'
 import type { DisplayState } from '../shared/display.ts'
 import type { FirewallAllowResult, FirewallState, SettingsPage } from '../shared/firewall.ts'
@@ -21,6 +21,18 @@ export interface ShiftPaneApi {
     forget(deviceId: string): Promise<void>
     /** Switches one phone to a split (widgets only, 70 / 30, ...); the phone keeps it. */
     setSplit(phoneId: string, split: SplitName): Promise<void>
+    /**
+     * Switches what one phone's monitor area shows (the virtual monitor, or a copy of one of the
+     * PC's monitors from `monitors`); the phone keeps it. A copy of a monitor that is not listed
+     * is ignored.
+     */
+    setSource(phoneId: string, source: MonitorSource): Promise<void>
+  }
+  /** The PC's real monitors a phone can copy (not the virtual one), kept current. */
+  monitors: {
+    get(): Promise<MonitorInfo[]>
+    /** Calls `listener` on every change; returns an unsubscribe function. */
+    onChange(listener: (monitors: MonitorInfo[]) => void): () => void
   }
   /** Whether Windows Firewall lets phones reach the pairing server. Always "unknown" off Windows. */
   firewall: {

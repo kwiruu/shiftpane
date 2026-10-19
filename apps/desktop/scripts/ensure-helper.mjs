@@ -8,16 +8,22 @@
 // of your own (then nothing is built).
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { msvcEnvironment } from './msvc-env.mjs'
 
 if (process.env.SHIFTPANE_SKIP_HELPER_BUILD === '1' || process.env.SHIFTPANE_HELPER) {
   process.exit(0)
 }
 
 const repoRoot = fileURLToPath(new URL('../../../', import.meta.url))
+// On Windows, link with a Visual Studio that has the C++ libraries rather than whichever rustc
+// finds first (see msvc-env.mjs). Null elsewhere, or when already in a build tools prompt.
+const msvc = msvcEnvironment()
+if (msvc) console.info(`Linking with the C++ tools in ${msvc.install}`)
 console.info('Building the display helper (cargo build -p shiftpane-helper)...')
 const result = spawnSync('cargo', ['build', '-p', 'shiftpane-helper'], {
   cwd: repoRoot,
   stdio: 'inherit',
+  ...(msvc && { env: msvc.env }),
 })
 
 if (result.error && result.error.code === 'ENOENT') {

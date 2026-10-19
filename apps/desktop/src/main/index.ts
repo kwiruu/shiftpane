@@ -29,6 +29,7 @@ import { FirewallMonitor } from './firewall/monitor.ts'
 import { allowThroughFirewall, queryFirewall } from './firewall/powershell.ts'
 import { PairingService } from './pairing.ts'
 import { fileStorage } from './storage.ts'
+import { acceptSource } from './stream/monitors.ts'
 import { type StreamingService, startStreaming } from './stream/service.ts'
 import { startWidgets, type WidgetService } from './widgets/index.ts'
 
@@ -236,7 +237,7 @@ function registerBoardIpc(service: BoardService): void {
   })
 }
 
-function registerIpc(service: PairingService): void {
+function registerIpc(service: PairingService, monitors: StreamingService['monitors']): void {
   ipcMain.handle(IpcChannel.pairingGet, (event) => (fromMainWindow(event) ? service.state : null))
   ipcMain.handle(IpcChannel.pairingSelectHost, async (event, address: unknown) => {
     if (fromMainWindow(event) && typeof address === 'string') await service.selectHost(address)
@@ -257,7 +258,22 @@ function registerIpc(service: PairingService): void {
       service.hub.send(phoneId, { type: 'split.set', split: parsed.data })
     }
   })
+  // What a phone's monitor area shows is picked the same way, and checked the same way. A copy
+  // has to be of a monitor that is listed now, which also keeps the virtual monitor out of it.
+  ipcMain.handle(IpcChannel.phonesSetSource, (event, phoneId: unknown, source: unknown) => {
+    const accepted = acceptSource(source, monitors.list())
+    if (fromMainWindow(event) && typeof phoneId === 'string' && accepted) {
+      service.hub.send(phoneId, { type: 'source.set', source: accepted })
+    }
+  })
   service.on('change', (state) => mainWindow?.webContents.send(IpcChannel.pairingChanged, state))
+}
+
+function registerMonitorIpc(monitors: StreamingService['monitors']): void {
+  ipcMain.handle(IpcChannel.monitorsGet, (event) =>
+    fromMainWindow(event) ? monitors.list() : null,
+  )
+  monitors.onChange((list) => mainWindow?.webContents.send(IpcChannel.monitorsChanged, list))
 }
 
 ipcMain.on(IpcChannel.appVersion, (event) => {
@@ -327,7 +343,8 @@ app.whenReady().then(() => {
     storage: fileStorage(join(app.getPath('userData'), 'board.json')),
     log: (message) => console.info(`[board] ${message}`),
   })
-  registerIpc(pairing)
+  registerIpc(pairing, streaming.monitors)
+  registerMonitorIpc(streaming.monitors)
   registerWindowIpc()
   registerBoardIpc(board)
   registerDisplayIpc(controller)

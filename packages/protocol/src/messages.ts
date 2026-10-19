@@ -123,6 +123,11 @@ export const ScreenMessage = z.object({
   safeArea: z.object({ top: Inset, right: Inset, bottom: Inset, left: Inset }),
   /** Absent when the browser cannot tell; treated as the usual way up. */
   turn: ScreenTurn.optional(),
+  /**
+   * What the monitor area shows, so the desktop window's picker follows the phone. Optional:
+   * a phone that predates it says nothing, and the window then takes it for the virtual monitor.
+   */
+  source: MonitorSource.optional(),
 })
 export type ScreenReport = Omit<z.infer<typeof ScreenMessage>, 'type'>
 export type SafeArea = ScreenReport['safeArea']
@@ -284,6 +289,18 @@ export const SplitSetMessage = z.object({
   split: SplitName,
 })
 
+/**
+ * The desktop window picked what this phone's monitor area shows. The phone switches to it and
+ * keeps it, like one picked from its own menu, then reports its screen as usual so the window's
+ * picker follows. The PC only ever sends a monitor it is offering in `monitors`, or the virtual
+ * one. A phone that predates this message drops it as unknown, which is why it did not bump
+ * `PROTOCOL_VERSION`.
+ */
+export const SourceSetMessage = z.object({
+  type: z.literal('source.set'),
+  source: MonitorSource,
+})
+
 export const ErrorCode = z.enum([
   'bad-message',
   'unauthorized',
@@ -306,6 +323,7 @@ export const PcMessage = z.discriminatedUnion('type', [
   WidgetUpdateMessage,
   BoardMessage,
   SplitSetMessage,
+  SourceSetMessage,
   PcRtcSignalMessage,
   ErrorMessage,
   PingMessage,
