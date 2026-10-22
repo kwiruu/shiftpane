@@ -175,3 +175,17 @@ describe('runCollector', () => {
     expect(log).toHaveBeenCalledWith('hello {"n":1}')
   })
 })
+
+describe('inspectCollector', () => {
+  it('passes a collector without running it, and says what is wrong with one that is not', async () => {
+    const { inspectCollector } = await import('./run.ts')
+    expect(
+      await inspectCollector('export default async ({ fetch }) => (await fetch("x")).json()'),
+    ).toBeNull()
+    expect(await inspectCollector('export const x = 1')).toMatch(/has to export a collector/)
+    expect(await inspectCollector('export default (')).toMatch(/SyntaxError/)
+    expect(await inspectCollector("import fs from 'node:fs'\nexport default () => ({})")).toMatch(
+      /only import defineCollector/,
+    )
+  })
+})

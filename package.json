@@ -23,6 +23,7 @@
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
+    "esbuild": "catalog:",
     "turbo": "catalog:",
     "typescript": "catalog:"
   }

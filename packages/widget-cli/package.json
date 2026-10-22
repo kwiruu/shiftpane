@@ -1,0 +1,38 @@
+{
+  "name": "shiftpane-widget",
+  "version": "0.5.0",
+  "description": "Check, run and pack ShiftPane widgets: shiftpane-widget validate | dev | pack",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kwiruu/shiftpane.git",
+    "directory": "packages/widget-cli"
+  },
+  "homepage": "https://shiftpane.vercel.app/docs/making-widgets",
+  "type": "module",
+  "bin": {
+    "shiftpane-widget": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-package.mjs --bundle src/cli.ts:dist/cli.js",
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@shiftpane/widget-runtime": "workspace:^",
+    "@shiftpane/widget-sdk": "workspace:^",
+    "@types/node": "catalog:",
+    "esbuild": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

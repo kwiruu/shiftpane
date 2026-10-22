@@ -6,7 +6,14 @@ import type {
   PcMessage,
   PhoneMessage,
 } from '@shiftpane/protocol'
-import { type HostFetch, type RunResult, runCollector } from '@shiftpane/widget-runtime'
+import {
+  guardedFetch,
+  type HostFetch,
+  type PackageTexts,
+  type RunResult,
+  readWidgetFolder,
+  runCollector,
+} from '@shiftpane/widget-runtime'
 import {
   type ActionName,
   addedPermissions,
@@ -20,8 +27,6 @@ import {
 } from '@shiftpane/widget-sdk'
 import type { FolderCheck, InstalledInfo, InstallResult } from '../../shared/widgets.ts'
 import type { PhoneHub, PhoneInfo } from '../server/phone-hub.ts'
-import { guardedFetch } from './fetch.ts'
-import { type PackageTexts, readWidgetFolder } from './folder.ts'
 import type { WidgetSecrets } from './secrets.ts'
 import type { WidgetCollector } from './service.ts'
 import type { SourceReader } from './sources.ts'

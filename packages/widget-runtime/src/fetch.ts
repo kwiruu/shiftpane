@@ -3,8 +3,8 @@ import type { IncomingMessage } from 'node:http'
 import http from 'node:http'
 import https from 'node:https'
 import { BlockList, isIP } from 'node:net'
-import type { HostFetch, HostRequest, HostResponse } from '@shiftpane/widget-runtime'
 import { isHostAllowed, type Permissions } from '@shiftpane/widget-sdk'
+import type { HostFetch, HostRequest, HostResponse } from './run.ts'
 
 /**
  * The `fetch` a collector gets: every request is checked against the widget's manifest.

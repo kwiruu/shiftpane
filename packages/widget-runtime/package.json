@@ -1,24 +1,45 @@
 {
   "name": "@shiftpane/widget-runtime",
-  "version": "0.0.0",
-  "private": true,
-  "description": "Runs a widget's collector.js in a QuickJS sandbox with a guarded fetch, a time budget and a memory cap",
+  "version": "0.5.0",
+  "description": "Running widget packages on a PC: the QuickJS sandbox for collectors, the guarded fetch, and reading, packing and opening packages",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kwiruu/shiftpane.git",
+    "directory": "packages/widget-runtime"
+  },
+  "homepage": "https://shiftpane.vercel.app/docs/making-widgets",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"
   },
+  "files": [
+    "dist"
+  ],
   "scripts": {
+    "build": "node ../../scripts/build-package.mjs --types src/index.ts:dist/index.js",
     "typecheck": "tsc",
     "test": "vitest run"
   },
   "dependencies": {
     "@jitl/quickjs-singlefile-cjs-release-sync": "0.32.0",
-    "@shiftpane/widget-sdk": "workspace:*",
-    "quickjs-emscripten-core": "0.32.0"
+    "@shiftpane/widget-sdk": "workspace:^",
+    "quickjs-emscripten-core": "0.32.0",
+    "fflate": "^0.8.3"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "esbuild": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/types/src/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
   }
 }

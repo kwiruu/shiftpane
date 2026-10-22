@@ -1,5 +1,5 @@
 /// <reference path="./webassembly.d.ts" />
-import variant from '@jitl/quickjs-singlefile-cjs-release-sync'
+import quickjsVariant from '@jitl/quickjs-singlefile-cjs-release-sync'
 import type { JsonValue } from '@shiftpane/widget-sdk'
 import {
   newQuickJSWASMModuleFromVariant,
@@ -21,6 +21,13 @@ import {
  * this build, so the ceiling is the limit.) Run collectors one at a time, or one greedy collector
  * can make another run out of memory too.
  */
+
+/**
+ * The QuickJS build. It is CommonJS: a bundler hands over its default export, plain Node the
+ * whole module, with the export under `default`.
+ */
+const variant =
+  (quickjsVariant as unknown as { default?: typeof quickjsVariant }).default ?? quickjsVariant
 
 /** The sandbox's memory, QuickJS itself included: a collector gets about 32 MB of it. */
 const MEMORY_CEILING = 48 * 1024 * 1024
@@ -82,6 +89,8 @@ export interface RunInput {
   fetch: HostFetch
   log?: (message: string) => void
   limits?: Partial<RunLimits>
+  /** Load the collector and check it exports one, without running it. */
+  inspectOnly?: boolean
 }
 
 export type RunResult =
@@ -304,6 +313,16 @@ export async function runCollector(input: RunInput): Promise<RunResult> {
     const exports = await settled(vm, runtime, evaluated.value, pump, timeout)
     const collect = vm.getProp(exports, 'default')
     exports.dispose()
+    if (input.inspectOnly) {
+      const kind = vm.typeof(collect)
+      collect.dispose()
+      if (kind !== 'function') {
+        throw new RunError(
+          'collector.js has to export a collector: export default defineCollector(...)',
+        )
+      }
+      return { ok: true, output: {} }
+    }
 
     const run = vm.getProp(vm.global, '__run')
     const contextJson = vm.newString(
@@ -380,4 +399,22 @@ function describe(error: unknown): string {
     }
   }
   return String(error)
+}
+
+/**
+ * Loads a collector without running it: whether it parses, imports nothing but the SDK, and
+ * exports a collector. Returns what is wrong, or null.
+ */
+export async function inspectCollector(code: string): Promise<string | null> {
+  const result = await runCollector({
+    code,
+    config: {},
+    secrets: {},
+    sources: {},
+    fetch: async () => {
+      throw new Error('inspecting does not fetch')
+    },
+    inspectOnly: true,
+  })
+  return result.ok ? null : result.error
 }

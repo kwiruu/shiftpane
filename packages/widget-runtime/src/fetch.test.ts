@@ -1,10 +1,10 @@
 import type { LookupAddress } from 'node:dns'
 import { createServer, type Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
-import { runCollector } from '@shiftpane/widget-runtime'
 import { NO_PERMISSIONS } from '@shiftpane/widget-sdk'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { checkUrl, guardedFetch, isPublicAddress, publicOnly } from './fetch.ts'
+import { runCollector } from './run.ts'
 
 const github = { ...NO_PERMISSIONS, network: ['api.github.com'] }
 

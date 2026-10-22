@@ -1,0 +1,37 @@
+{
+  "name": "create-shiftpane-widget",
+  "version": "0.5.0",
+  "description": "Start a ShiftPane widget: npm create shiftpane-widget",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kwiruu/shiftpane.git",
+    "directory": "packages/create-widget"
+  },
+  "homepage": "https://shiftpane.vercel.app/docs/making-widgets",
+  "type": "module",
+  "bin": {
+    "create-shiftpane-widget": "./dist/cli.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "node ../../scripts/build-package.mjs --bundle src/cli.ts:dist/cli.js",
+    "typecheck": "tsc",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@shiftpane/widget-sdk": "workspace:^",
+    "@types/node": "catalog:",
+    "esbuild": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,14 +1,25 @@
 {
   "name": "@shiftpane/widget-sdk",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.5.0",
   "description": "The widget contract: manifest schema, defineCollector and the collector context",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kwiruu/shiftpane.git",
+    "directory": "packages/widget-sdk"
+  },
+  "homepage": "https://shiftpane.vercel.app/docs/making-widgets",
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
     "./manifest.schema.json": "./schema/widget-manifest.schema.json"
   },
+  "files": [
+    "dist",
+    "schema"
+  ],
   "scripts": {
+    "build": "node ../../scripts/build-package.mjs --types src/index.ts:dist/index.js",
     "typecheck": "tsc",
     "test": "vitest run",
     "schema": "node scripts/emit-schema.ts"
@@ -18,7 +29,18 @@
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "esbuild": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "access": "public",
+    "exports": {
+      ".": {
+        "types": "./dist/types/src/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "./manifest.schema.json": "./schema/widget-manifest.schema.json"
+    }
   }
 }

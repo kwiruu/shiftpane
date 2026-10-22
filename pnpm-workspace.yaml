@@ -14,6 +14,7 @@ catalog:
   '@playwright/test': ^1.64.0
   '@types/node': ^24.19.2
   # build
+  esbuild: ^0.28.2
   # Vite 7 until electron-vite 6 (Vite 8 support) leaves beta.
   vite: ^7.3.7
   '@vitejs/plugin-react': ^5.2.0
