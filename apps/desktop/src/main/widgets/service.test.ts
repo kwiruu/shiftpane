@@ -181,4 +181,34 @@ describe('WidgetService', () => {
     expect(t.sent).toHaveLength(1)
     t.service.stop()
   })
+
+  it('starts a widget a phone already shows once it gets a collector', async () => {
+    const t = setup({})
+    t.subscribe('a', ['gpu-ring'])
+    await flush()
+    expect(t.sent).toEqual([])
+    const ring = collector([{ percent: 40 }])
+    t.service.setCollectors({ 'gpu-ring': ring.widget })
+    await flush()
+    expect(
+      t.sent.map(({ id, message }) => [id, message.type === 'widget.update' && message.data]),
+    ).toEqual([['a', { percent: 40 }]])
+    t.service.stop()
+  })
+
+  it('restarts a widget whose collector was replaced, and stops one that was removed', async () => {
+    const before = collector([{ version: 1 }])
+    const t = setup({ 'gpu-ring': before.widget })
+    t.subscribe('a', ['gpu-ring'])
+    await flush()
+    const after = collector([{ version: 2 }])
+    t.service.setCollectors({ 'gpu-ring': after.widget })
+    await flush()
+    expect(after.runs.count).toBe(1)
+    t.service.setCollectors({})
+    await vi.advanceTimersByTimeAsync(5000)
+    expect(before.runs.count).toBe(1)
+    expect(after.runs.count).toBe(1)
+    t.service.stop()
+  })
 })

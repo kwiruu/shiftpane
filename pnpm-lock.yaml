@@ -86,6 +86,9 @@ importers:
       '@shiftpane/ui':
         specifier: workspace:*
         version: link:../../packages/ui
+      '@shiftpane/widget-runtime':
+        specifier: workspace:*
+        version: link:../../packages/widget-runtime
       '@shiftpane/widget-sdk':
         specifier: workspace:*
         version: link:../../packages/widget-sdk

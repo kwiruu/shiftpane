@@ -4,9 +4,11 @@ import { Board, SplitName } from '@shiftpane/protocol'
 import {
   app,
   BrowserWindow,
+  dialog,
   type IpcMainEvent,
   type IpcMainInvokeEvent,
   ipcMain,
+  safeStorage,
   session,
   shell,
 } from 'electron'
@@ -18,6 +20,7 @@ import {
   type SettingsPage,
 } from '../shared/firewall.ts'
 import { IpcChannel } from '../shared/pairing.ts'
+import type { FolderCheck } from '../shared/widgets.ts'
 import { BoardService, EDITOR } from './board/service.ts'
 import {
   bindDisplayToHub,
@@ -28,10 +31,11 @@ import {
 import { FirewallMonitor } from './firewall/monitor.ts'
 import { allowThroughFirewall, queryFirewall } from './firewall/powershell.ts'
 import { PairingService } from './pairing.ts'
+import { SettingsService } from './settings.ts'
 import { fileStorage } from './storage.ts'
 import { acceptSource } from './stream/monitors.ts'
 import { type StreamingService, startStreaming } from './stream/service.ts'
-import { startWidgets, type WidgetService } from './widgets/index.ts'
+import { startWidgets, type Widgets } from './widgets/index.ts'
 
 const isDev = !app.isPackaged && process.env.ELECTRON_RENDERER_URL !== undefined
 const platform =
@@ -51,7 +55,8 @@ let pairing: PairingService | null = null
 let firewall: FirewallMonitor | null = null
 let display: DisplayController | null = null
 let streaming: StreamingService | null = null
-let widgets: WidgetService | null = null
+let widgets: Widgets | null = null
+let settings: SettingsService | null = null
 let board: BoardService | null = null
 
 const UNKNOWN_FIREWALL: FirewallState = { status: 'unknown' }
@@ -237,6 +242,93 @@ function registerBoardIpc(service: BoardService): void {
   })
 }
 
+const WidgetId = z
+  .string()
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
+  .max(64)
+const NOT_DEVELOPER: FolderCheck = {
+  status: 'invalid',
+  folder: '',
+  problems: ['Turn on Developer mode in Settings to load widgets from a folder.'],
+}
+
+/**
+ * Installed widgets and the settings that unlock loading them from a folder. Paths never come
+ * from the window: the main process asks for the folder itself, and a reload uses the folder the
+ * widget was loaded from.
+ */
+function registerWidgetIpc(installed: Widgets['installed'], appSettings: SettingsService): void {
+  const developer = async () => (await appSettings.get()).developerMode
+  ipcMain.handle(IpcChannel.settingsGet, (event) =>
+    fromMainWindow(event) ? appSettings.get() : null,
+  )
+  ipcMain.handle(IpcChannel.settingsSet, (event, patch: unknown) => {
+    if (!fromMainWindow(event) || typeof patch !== 'object' || patch === null) return null
+    return appSettings.set(patch)
+  })
+  appSettings.on('change', (value) =>
+    mainWindow?.webContents.send(IpcChannel.settingsChanged, value),
+  )
+
+  ipcMain.handle(IpcChannel.widgetsList, (event) => (fromMainWindow(event) ? installed.list() : []))
+  ipcMain.handle(IpcChannel.widgetsChooseFolder, async (event): Promise<FolderCheck> => {
+    if (!fromMainWindow(event) || !mainWindow) return { status: 'canceled' }
+    if (!(await developer())) return NOT_DEVELOPER
+    const picked = await dialog.showOpenDialog(mainWindow, {
+      title: 'Load a widget folder',
+      buttonLabel: 'Check this widget',
+      properties: ['openDirectory'],
+    })
+    const folder = picked.filePaths[0]
+    if (picked.canceled || !folder) return { status: 'canceled' }
+    return installed.check(folder)
+  })
+  ipcMain.handle(IpcChannel.widgetsReload, async (event, id: unknown): Promise<FolderCheck> => {
+    const parsed = WidgetId.safeParse(id)
+    if (!fromMainWindow(event) || !parsed.success) return { status: 'canceled' }
+    if (!(await developer())) return NOT_DEVELOPER
+    const origin = installed.origin(parsed.data)
+    if (!origin) return { status: 'canceled' }
+    return installed.check(origin.path)
+  })
+  ipcMain.handle(IpcChannel.widgetsInstall, (event, token: unknown) => {
+    if (!fromMainWindow(event) || typeof token !== 'string') {
+      return { ok: false, problem: 'Nothing to install.' }
+    }
+    return installed.install(token)
+  })
+  ipcMain.handle(IpcChannel.widgetsRemove, async (event, id: unknown) => {
+    const parsed = WidgetId.safeParse(id)
+    if (fromMainWindow(event) && parsed.success) await installed.remove(parsed.data)
+  })
+  ipcMain.handle(IpcChannel.widgetsSetConfig, (event, id: unknown, values: unknown) => {
+    const parsed = WidgetId.safeParse(id)
+    if (!fromMainWindow(event) || !parsed.success || typeof values !== 'object' || !values) {
+      return ['Nothing to set.']
+    }
+    return installed.setConfig(parsed.data, values as Record<string, unknown>)
+  })
+  ipcMain.handle(
+    IpcChannel.widgetsSetSecret,
+    (event, id: unknown, name: unknown, value: unknown) => {
+      const parsed = WidgetId.safeParse(id)
+      if (
+        !fromMainWindow(event) ||
+        !parsed.success ||
+        typeof name !== 'string' ||
+        (typeof value !== 'string' && value !== null) ||
+        (typeof value === 'string' && value.length > 4096)
+      ) {
+        return 'Nothing to set.'
+      }
+      return installed.setSecret(parsed.data, name, value)
+    },
+  )
+  const push = () => mainWindow?.webContents.send(IpcChannel.widgetsChanged, installed.list())
+  installed.on('installed', push)
+  installed.on('status', push)
+}
+
 function registerIpc(service: PairingService, monitors: StreamingService['monitors']): void {
   ipcMain.handle(IpcChannel.pairingGet, (event) => (fromMainWindow(event) ? service.state : null))
   ipcMain.handle(IpcChannel.pairingSelectHost, async (event, address: unknown) => {
@@ -337,7 +429,15 @@ app.whenReady().then(() => {
   widgets = startWidgets({
     hub: pairing.hub,
     helper: async () => (await helper.session()).channel,
+    dataDir: app.getPath('userData'),
+    appVersion: app.getVersion(),
+    cipher: {
+      available: () => safeStorage.isEncryptionAvailable(),
+      encrypt: (text) => safeStorage.encryptString(text),
+      decrypt: (data) => safeStorage.decryptString(data),
+    },
   })
+  settings = new SettingsService(fileStorage(join(app.getPath('userData'), 'settings.json')))
   board = new BoardService({
     hub: pairing.hub,
     storage: fileStorage(join(app.getPath('userData'), 'board.json')),
@@ -347,6 +447,7 @@ app.whenReady().then(() => {
   registerMonitorIpc(streaming.monitors)
   registerWindowIpc()
   registerBoardIpc(board)
+  registerWidgetIpc(widgets.installed, settings)
   registerDisplayIpc(controller)
   firewall = createFirewallMonitor()
   registerFirewallIpc(pairing, firewall)

@@ -15,7 +15,7 @@ export interface WidgetCollector {
 
 export interface WidgetServiceOptions {
   hub: Pick<PhoneHub, 'on' | 'off' | 'send'>
-  /** Collectors by widget id. Only these ids are ever run. */
+  /** Collectors by widget id. Only these ids are ever run; `setCollectors` replaces them. */
   collectors: Record<string, WidgetCollector>
   /** Presses a media button on the PC. Without it, `media.control` is ignored. */
   mediaControl?: (action: MediaAction) => Promise<void>
@@ -37,6 +37,9 @@ interface Running {
  * collector runs only while at least one phone shows its widget, and its data goes to exactly
  * those phones. A phone that subscribes to a widget that is already running gets the latest
  * data at once instead of waiting for the next run.
+ *
+ * The collectors can change while it runs (a widget installed, updated or removed): a phone that
+ * already shows a widget gets its data as soon as there is a collector for it.
  */
 export class WidgetService {
   readonly #options: WidgetServiceOptions
@@ -45,10 +48,12 @@ export class WidgetService {
   readonly #subscriptions = new Map<string, Set<string>>()
   readonly #running = new Map<string, Running>()
   readonly #last = new Map<string, { json: string; message: WidgetUpdate }>()
+  #collectors: Record<string, WidgetCollector>
   #stopped = false
 
   constructor(options: WidgetServiceOptions) {
     this.#options = options
+    this.#collectors = options.collectors
     this.#log = options.log ?? (() => {})
     const { hub } = options
     const onMessage = (phone: PhoneInfo, message: PhoneMessage) => this.#onMessage(phone, message)
@@ -75,14 +80,31 @@ export class WidgetService {
     for (const unhook of this.#unhook.splice(0)) unhook()
   }
 
-  #known(id: string): boolean {
-    return Object.hasOwn(this.#options.collectors, id)
+  /**
+   * Replaces the collectors. A widget whose collector changed or went away stops; one that some
+   * phone shows and now has a collector starts.
+   */
+  setCollectors(collectors: Record<string, WidgetCollector>): void {
+    const before = this.#collectors
+    this.#collectors = collectors
+    for (const [id, running] of this.#running) {
+      if (this.#collector(id) === (Object.hasOwn(before, id) ? before[id] : undefined)) continue
+      clearInterval(running.timer)
+      this.#running.delete(id)
+      this.#last.delete(id)
+    }
+    this.#reconcile()
+  }
+
+  #collector(id: string): WidgetCollector | undefined {
+    return Object.hasOwn(this.#collectors, id) ? this.#collectors[id] : undefined
   }
 
   #onMessage(phone: PhoneInfo, message: PhoneMessage): void {
     if (message.type === 'widgets.subscribe') {
       const before = this.#subscriptions.get(phone.id) ?? new Set<string>()
-      const wanted = new Set(message.widgets.filter((id) => this.#known(id)))
+      // Kept even without a collector yet: the widget may be installed later.
+      const wanted = new Set(message.widgets)
       this.#subscriptions.set(phone.id, wanted)
       for (const id of wanted) {
         const last = this.#last.get(id)
@@ -112,7 +134,7 @@ export class WidgetService {
     const needed = new Set<string>()
     for (const widgets of this.#subscriptions.values()) for (const id of widgets) needed.add(id)
     for (const id of needed) {
-      const collector = this.#options.collectors[id]
+      const collector = this.#collector(id)
       if (!collector || this.#running.has(id)) continue
       const timer = setInterval(() => void this.#run(id), collector.intervalMs)
       this.#running.set(id, { timer, busy: false })
@@ -129,7 +151,7 @@ export class WidgetService {
   /** Collects once and sends the result to every phone showing the widget. */
   async #run(id: string, force = false): Promise<void> {
     const running = this.#running.get(id)
-    const collector = this.#options.collectors[id]
+    const collector = this.#collector(id)
     if (!running || !collector || running.busy) return
     running.busy = true
     try {

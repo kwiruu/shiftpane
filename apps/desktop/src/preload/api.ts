@@ -3,6 +3,7 @@ import type { CaptureEvent } from '../shared/capture.ts'
 import type { DisplayState } from '../shared/display.ts'
 import type { FirewallAllowResult, FirewallState, SettingsPage } from '../shared/firewall.ts'
 import type { PairingState } from '../shared/pairing.ts'
+import type { AppSettings, FolderCheck, InstalledInfo, InstallResult } from '../shared/widgets.ts'
 
 /** The only surface the renderer gets: exposed as `window.shiftpane` by the preload script. */
 export interface ShiftPaneApi {
@@ -54,6 +55,31 @@ export interface ShiftPaneApi {
     /** Calls `listener` on every change, from a phone or from here; returns an unsubscribe function. */
     onChange(listener: (board: Board | null) => void): () => void
     set(board: Board): Promise<void>
+  }
+  /**
+   * Widgets installed on this PC, besides the built-in ones. Loading one from a folder takes
+   * Developer mode; the main process picks the folder, so the window never names a path.
+   */
+  widgets: {
+    list(): Promise<InstalledInfo[]>
+    /** Calls `listener` on every change; returns an unsubscribe function. */
+    onChange(listener: (widgets: InstalledInfo[]) => void): () => void
+    /** Asks for a widget folder and checks it; nothing is installed until `install`. */
+    chooseFolder(): Promise<FolderCheck>
+    /** Checks an installed widget's folder again, to install what changed in it. */
+    reload(id: string): Promise<FolderCheck>
+    /** Installs a folder that was checked, once the user agreed to what it may do. */
+    install(token: string): Promise<InstallResult>
+    remove(id: string): Promise<void>
+    /** Sets a widget's config; resolves with what was wrong, empty when it was set. */
+    setConfig(id: string, values: Record<string, unknown>): Promise<string[]>
+    /** Sets one of a widget's secrets, or clears it with null; resolves with why it couldn't. */
+    setSecret(id: string, name: string, value: string | null): Promise<string | null>
+  }
+  settings: {
+    get(): Promise<AppSettings>
+    onChange(listener: (settings: AppSettings) => void): () => void
+    set(patch: Partial<AppSettings>): Promise<AppSettings>
   }
   /** The window itself, for the title bar's own buttons (Windows and Linux draw no frame). */
   window: {

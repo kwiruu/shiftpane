@@ -4,6 +4,7 @@ import type { CaptureEvent } from '../shared/capture.ts'
 import type { DisplayState } from '../shared/display.ts'
 import type { FirewallAllowResult, FirewallState } from '../shared/firewall.ts'
 import { IpcChannel, type PairingState } from '../shared/pairing.ts'
+import type { AppSettings, FolderCheck, InstalledInfo, InstallResult } from '../shared/widgets.ts'
 import type { ShiftPaneApi } from './api.ts'
 
 const platform: ShiftPaneApi['platform'] =
@@ -63,6 +64,32 @@ const api: ShiftPaneApi = {
       return () => ipcRenderer.off(IpcChannel.boardChanged, handler)
     },
     set: (board) => ipcRenderer.invoke(IpcChannel.boardSet, board) as Promise<void>,
+  },
+  widgets: {
+    list: () => ipcRenderer.invoke(IpcChannel.widgetsList) as Promise<InstalledInfo[]>,
+    onChange: (listener) => {
+      const handler = (_event: IpcRendererEvent, widgets: InstalledInfo[]) => listener(widgets)
+      ipcRenderer.on(IpcChannel.widgetsChanged, handler)
+      return () => ipcRenderer.off(IpcChannel.widgetsChanged, handler)
+    },
+    chooseFolder: () => ipcRenderer.invoke(IpcChannel.widgetsChooseFolder) as Promise<FolderCheck>,
+    reload: (id) => ipcRenderer.invoke(IpcChannel.widgetsReload, id) as Promise<FolderCheck>,
+    install: (token) =>
+      ipcRenderer.invoke(IpcChannel.widgetsInstall, token) as Promise<InstallResult>,
+    remove: (id) => ipcRenderer.invoke(IpcChannel.widgetsRemove, id) as Promise<void>,
+    setConfig: (id, values) =>
+      ipcRenderer.invoke(IpcChannel.widgetsSetConfig, id, values) as Promise<string[]>,
+    setSecret: (id, name, value) =>
+      ipcRenderer.invoke(IpcChannel.widgetsSetSecret, id, name, value) as Promise<string | null>,
+  },
+  settings: {
+    get: () => ipcRenderer.invoke(IpcChannel.settingsGet) as Promise<AppSettings>,
+    onChange: (listener) => {
+      const handler = (_event: IpcRendererEvent, settings: AppSettings) => listener(settings)
+      ipcRenderer.on(IpcChannel.settingsChanged, handler)
+      return () => ipcRenderer.off(IpcChannel.settingsChanged, handler)
+    },
+    set: (patch) => ipcRenderer.invoke(IpcChannel.settingsSet, patch) as Promise<AppSettings>,
   },
   window: {
     minimize: () => ipcRenderer.invoke(IpcChannel.windowMinimize) as Promise<void>,
