@@ -1,2 +1,7 @@
+export * from './bindings.ts'
 export * from './collector.ts'
 export * from './manifest.ts'
+export * from './package.ts'
+export * from './permissions.ts'
+export * from './sources.ts'
+export * from './view.ts'

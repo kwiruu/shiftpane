@@ -1,9 +1,9 @@
 // Writes schema/widget-manifest.schema.json from the zod manifest schema.
 import { writeFileSync } from 'node:fs'
 import { z } from 'zod'
-import { WidgetManifest } from '../src/manifest.ts'
+import { manifestSchema } from '../src/manifest.ts'
 
-const schema = z.toJSONSchema(WidgetManifest, { io: 'input', unrepresentable: 'any' })
+const schema = z.toJSONSchema(manifestSchema, { io: 'input', unrepresentable: 'any' })
 const out = new URL('../schema/widget-manifest.schema.json', import.meta.url)
 writeFileSync(
   out,
