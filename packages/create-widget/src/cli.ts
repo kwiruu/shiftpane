@@ -4,7 +4,7 @@ import { createInterface } from 'node:readline/promises'
 import { parseArgs } from 'node:util'
 import { type Answers, idFrom, type Template, templates, widgetFiles } from './templates.ts'
 
-const HELP = `npm create shiftpane-widget [folder] -- [--template pc|web] [--name "My widget"] [--author <github login>]
+const HELP = `npx create-shiftpane-widget [folder] [--template pc|web] [--name "My widget"] [--author <github login>] [--yes]
 
   pc   reads the PC's CPU, with no code
   web  a collector that fetches from one host (GitHub, to start)
