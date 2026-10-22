@@ -4,4 +4,4 @@
  * two drift. The desktop app refuses a helper that answers `helper.hello` with another number,
  * which is what a stale `target/` build looks like after the protocol changed.
  */
-export const HELPER_PROTOCOL_VERSION = 3
+export const HELPER_PROTOCOL_VERSION = 4

@@ -25,6 +25,12 @@ interface ResultTypes {
   'system.stats': 'systemStats'
   'media.state': 'media'
   'media.control': 'mediaControlled'
+  'disks.state': 'disks'
+  'processes.top': 'processes'
+  'power.state': 'power'
+  'audio.state': 'audio'
+  'audio.control': 'audioControlled'
+  'window.active': 'activeWindow'
 }
 export type ResultOf<M extends Method> = Extract<CallResult, { type: ResultTypes[M] }>
 

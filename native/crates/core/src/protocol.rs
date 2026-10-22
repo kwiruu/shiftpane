@@ -8,9 +8,10 @@ use ts_rs::TS;
 
 /// Bumped on any breaking change to the messages below, and when the desktop app starts
 /// relying on a call an older helper lacks (2: `display.prepare`; 3: `system.stats`,
-/// `media.state`, `media.control`). The desktop app compares it with
+/// `media.state`, `media.control`; 4: `disks.state`, `processes.top`, `power.state`,
+/// `audio.state`, `audio.control`, `window.active`). The desktop app compares it with
 /// `HELPER_PROTOCOL_VERSION` in `packages/helper-client`.
-pub const PROTOCOL_VERSION: u32 = 3;
+pub const PROTOCOL_VERSION: u32 = 4;
 
 /// One line from the desktop app.
 #[derive(Debug, Clone, PartialEq, Deserialize, Serialize, TS)]
@@ -56,6 +57,37 @@ pub enum Call {
     /// Presses one of the OS media buttons on whatever is playing.
     #[serde(rename = "media.control")]
     MediaControl(MediaControlParams),
+    /// Each fixed drive: space used and total, and bytes read and written per second since
+    /// the previous call (null on the first).
+    #[serde(rename = "disks.state")]
+    Disks,
+    /// The busiest programs right now, by CPU, measured since the previous call.
+    #[serde(rename = "processes.top")]
+    Processes,
+    /// The battery, when the PC has one.
+    #[serde(rename = "power.state")]
+    Power,
+    /// The default output device: its volume, whether it is muted, and its name.
+    #[serde(rename = "audio.state")]
+    AudioState,
+    /// Changes the default output device's volume or mute. Nothing else.
+    #[serde(rename = "audio.control")]
+    AudioControl(AudioControlParams),
+    /// The app in front and its window title.
+    #[serde(rename = "window.active")]
+    ActiveWindow,
+}
+
+/// The two things `audio.control` can do. There is no free-form command.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize, TS)]
+#[serde(tag = "action", rename_all = "kebab-case")]
+#[ts(export)]
+pub enum AudioControlParams {
+    ToggleMute,
+    /// 0-100; anything else is refused.
+    SetVolume {
+        percent: f64,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize, TS)]
@@ -89,6 +121,70 @@ pub struct SystemStats {
     pub gpu_percent: Option<f64>,
     pub network_received_per_second: Option<f64>,
     pub network_sent_per_second: Option<f64>,
+    /// The hottest GPU, as its driver reports it (what Task Manager shows).
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_temperature_celsius: Option<f64>,
+    /// The fastest GPU fan, when the driver reports one.
+    #[ts(optional)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub gpu_fan_rpm: Option<f64>,
+}
+
+/// One fixed drive. Byte counts are `f64` so they reach TypeScript as plain numbers.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct DriveInfo {
+    /// How the OS names it, e.g. `C:`.
+    pub name: String,
+    pub used_bytes: f64,
+    pub total_bytes: f64,
+    pub read_per_second: Option<f64>,
+    pub write_per_second: Option<f64>,
+}
+
+/// One program's load, its processes added together.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ProcessLoad {
+    /// The program's name, e.g. `chrome`.
+    pub name: String,
+    /// 0-100, its share of the whole processor.
+    pub cpu_percent: f64,
+    pub memory_bytes: Option<f64>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct Battery {
+    /// 0-100.
+    pub percent: Option<f64>,
+    pub charging: bool,
+    /// Only while running on the battery, when the OS can tell.
+    pub minutes_left: Option<f64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct AudioState {
+    /// 0-100.
+    pub volume_percent: Option<f64>,
+    pub muted: Option<bool>,
+    /// The output device's name, e.g. "Speakers".
+    pub device: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export)]
+pub struct ActiveWindow {
+    /// The app's name, e.g. "Visual Studio Code".
+    pub app: Option<String>,
+    pub title: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -200,6 +296,19 @@ pub enum CallResult {
     SystemStats(SystemStats),
     Media(MediaState),
     MediaControlled,
+    Disks {
+        drives: Vec<DriveInfo>,
+    },
+    Processes {
+        processes: Vec<ProcessLoad>,
+    },
+    /// `battery` is null on a PC without one.
+    Power {
+        battery: Option<Battery>,
+    },
+    Audio(AudioState),
+    AudioControlled,
+    ActiveWindow(ActiveWindow),
 }
 
 /// Pushed by the helper without a request, e.g. when the user unplugs or rearranges monitors.
@@ -442,6 +551,7 @@ mod tests {
             gpu_percent: None,
             network_received_per_second: Some(1000.0),
             network_sent_per_second: Some(10.0),
+            ..SystemStats::default()
         });
         assert_eq!(
             serde_json::to_value(&stats).unwrap(),
@@ -458,6 +568,63 @@ mod tests {
         assert_eq!(
             serde_json::to_value(CallResult::Media(MediaState::none())).unwrap()["status"],
             json!("none")
+        );
+    }
+
+    #[test]
+    fn parses_audio_control_and_nothing_else() {
+        let mute: Request = serde_json::from_value(json!({
+            "id": 6, "method": "audio.control", "params": {"action": "toggle-mute"}
+        }))
+        .unwrap();
+        assert_eq!(
+            mute.call,
+            Call::AudioControl(AudioControlParams::ToggleMute)
+        );
+        let volume: Request = serde_json::from_value(json!({
+            "id": 7, "method": "audio.control", "params": {"action": "set-volume", "percent": 40}
+        }))
+        .unwrap();
+        assert_eq!(
+            volume.call,
+            Call::AudioControl(AudioControlParams::SetVolume { percent: 40.0 })
+        );
+        for params in [
+            json!({"action": "set-volume"}),
+            json!({"action": "set-volume", "percent": "40"}),
+            json!({"action": "mute-everything"}),
+        ] {
+            let bad = serde_json::from_value::<Request>(
+                json!({"id": 8, "method": "audio.control", "params": params}),
+            );
+            assert!(bad.is_err(), "{params}");
+        }
+    }
+
+    #[test]
+    fn serializes_the_new_readings() {
+        let power = CallResult::Power {
+            battery: Some(Battery {
+                percent: Some(82.0),
+                charging: false,
+                minutes_left: Some(214.0),
+            }),
+        };
+        assert_eq!(
+            serde_json::to_value(&power).unwrap(),
+            json!({"type": "power", "battery": {"percent": 82.0, "charging": false, "minutesLeft": 214.0}})
+        );
+        assert_eq!(
+            serde_json::to_value(CallResult::Power { battery: None }).unwrap(),
+            json!({"type": "power", "battery": null})
+        );
+        let window = CallResult::ActiveWindow(ActiveWindow {
+            app: Some("Code".into()),
+            title: None,
+        });
+        assert_eq!(
+            serde_json::to_value(&window).unwrap(),
+            json!({"type": "activeWindow", "app": "Code", "title": null})
         );
     }
 

@@ -26,8 +26,8 @@
 use std::path::{Path, PathBuf};
 
 use shiftpane_core::protocol::{
-    BackendInfo, Capabilities, DisplayInfo, ErrorCode, HelperError, MediaAction, MediaState,
-    SystemStats,
+    ActiveWindow, AudioControlParams, AudioState, BackendInfo, Battery, Capabilities, DisplayInfo,
+    DriveInfo, ErrorCode, HelperError, MediaAction, MediaState, ProcessLoad, SystemStats,
 };
 use shiftpane_core::{DisplayBackend, Mode};
 
@@ -35,13 +35,27 @@ pub mod plan;
 pub mod settings;
 
 #[cfg(windows)]
+mod audio;
+#[cfg(windows)]
+mod counters;
+#[cfg(windows)]
+mod disks;
+#[cfg(windows)]
 pub mod elevated;
+#[cfg(windows)]
+mod foreground;
 #[cfg(windows)]
 mod live;
 #[cfg(windows)]
 mod media;
 #[cfg(windows)]
+mod power;
+#[cfg(windows)]
+mod processes;
+#[cfg(windows)]
 mod stats;
+#[cfg(windows)]
+mod thermals;
 #[cfg(windows)]
 mod win32;
 
@@ -49,7 +63,10 @@ mod win32;
 /// on Windows.
 #[cfg(not(windows))]
 mod live {
-    use super::{DisplayInfo, HelperError, MediaAction, MediaState, Mode, SystemStats};
+    use super::{
+        ActiveWindow, AudioControlParams, AudioState, Battery, DisplayInfo, DriveInfo, HelperError,
+        MediaAction, MediaState, Mode, ProcessLoad, SystemStats,
+    };
 
     fn unsupported() -> HelperError {
         HelperError::unsupported("the Windows backend only runs on Windows")
@@ -67,6 +84,30 @@ mod live {
     }
 
     pub fn media_control(_action: MediaAction) -> Result<(), HelperError> {
+        Err(unsupported())
+    }
+
+    pub fn disks(_state: &mut Stats) -> Result<Vec<DriveInfo>, HelperError> {
+        Err(unsupported())
+    }
+
+    pub fn processes(_state: &mut Stats) -> Result<Vec<ProcessLoad>, HelperError> {
+        Err(unsupported())
+    }
+
+    pub fn power() -> Result<Option<Battery>, HelperError> {
+        Err(unsupported())
+    }
+
+    pub fn audio_state() -> Result<AudioState, HelperError> {
+        Err(unsupported())
+    }
+
+    pub fn audio_control(_params: AudioControlParams) -> Result<(), HelperError> {
+        Err(unsupported())
+    }
+
+    pub fn active_window() -> Result<ActiveWindow, HelperError> {
         Err(unsupported())
     }
 
@@ -99,7 +140,8 @@ pub struct VddBackend {
     settings_path: PathBuf,
     /// Whether this process put the virtual display on the desktop (or resized it).
     attached: bool,
-    /// The performance counter query behind `system.stats`, opened on first use.
+    /// The performance counter queries behind `system.stats`, `disks.state` and
+    /// `processes.top`, each opened on first use.
     stats: live::Stats,
 }
 
@@ -198,6 +240,30 @@ impl DisplayBackend for VddBackend {
 
     fn media_control(&mut self, action: MediaAction) -> Result<(), HelperError> {
         live::media_control(action)
+    }
+
+    fn disks(&mut self) -> Result<Vec<DriveInfo>, HelperError> {
+        live::disks(&mut self.stats)
+    }
+
+    fn processes(&mut self) -> Result<Vec<ProcessLoad>, HelperError> {
+        live::processes(&mut self.stats)
+    }
+
+    fn power(&mut self) -> Result<Option<Battery>, HelperError> {
+        live::power()
+    }
+
+    fn audio_state(&mut self) -> Result<AudioState, HelperError> {
+        live::audio_state()
+    }
+
+    fn audio_control(&mut self, params: AudioControlParams) -> Result<(), HelperError> {
+        live::audio_control(params)
+    }
+
+    fn active_window(&mut self) -> Result<ActiveWindow, HelperError> {
+        live::active_window()
     }
 }
 

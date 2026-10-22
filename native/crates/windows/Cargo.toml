@@ -13,11 +13,14 @@ tracing.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { workspace = true, features = [
+    "Wdk_Graphics_Direct3D",
     "Win32_Devices_DeviceAndDriverInstallation",
     "Win32_Devices_Display",
     "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_Storage_FileSystem",
     "Win32_System_Performance",
+    "Win32_System_Power",
     "Win32_System_Registry",
     "Win32_System_SystemInformation",
     "Win32_System_Threading",
@@ -25,8 +28,19 @@ windows-sys = { workspace = true, features = [
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
-# WinRT, for the system media controls (what is playing, play/pause/next/previous).
-windows = { workspace = true, features = ["Foundation", "Media_Control"] }
+# WinRT, for the system media controls (what is playing, play/pause/next/previous), and COM
+# for the output device's volume.
+windows = { workspace = true, features = [
+    "Foundation",
+    "Media_Control",
+    "Win32_Devices_FunctionDiscovery",
+    "Win32_Media_Audio",
+    "Win32_Media_Audio_Endpoints",
+    "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_Variant",
+    "Win32_UI_Shell_PropertiesSystem",
+] }
 
 [lints]
 workspace = true

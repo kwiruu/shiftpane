@@ -12,4 +12,12 @@ cpuPercent: number | null, memoryUsedBytes: number | null, memoryTotalBytes: num
 /**
  * 0-100, the busiest GPU's 3D engine load.
  */
-gpuPercent: number | null, networkReceivedPerSecond: number | null, networkSentPerSecond: number | null, };
+gpuPercent: number | null, networkReceivedPerSecond: number | null, networkSentPerSecond: number | null, 
+/**
+ * The hottest GPU, as its driver reports it (what Task Manager shows).
+ */
+gpuTemperatureCelsius?: number, 
+/**
+ * The fastest GPU fan, when the driver reports one.
+ */
+gpuFanRpm?: number, };

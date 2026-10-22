@@ -17,7 +17,7 @@ use windows_sys::Win32::System::Performance::{
 };
 use windows_sys::Win32::System::SystemInformation::{GlobalMemoryStatusEx, MEMORYSTATUSEX};
 
-use crate::plan;
+use crate::{plan, thermals};
 
 const CPU: &str = r"\Processor Information(_Total)\% Processor Utility";
 const GPU_3D: &str = r"\GPU Engine(*engtype_3D)\Utilization Percentage";
@@ -27,7 +27,7 @@ const NET_OUT: &str = r"\Network Interface(*)\Bytes Sent/sec";
 /// `PDH_CSTATUS_VALID_DATA` and `PDH_CSTATUS_NEW_DATA`: a value that can be read.
 const USABLE: u32 = 1;
 
-fn to_wide(text: &str) -> Vec<u16> {
+pub(crate) fn to_wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain(once(0)).collect()
 }
 
@@ -88,6 +88,7 @@ impl Sampler {
                 .and_then(values)
                 .map(|items| items.iter().map(|(_, value)| value.max(0.0)).sum::<f64>())
         };
+        let (gpu_temperature_celsius, gpu_fan_rpm) = thermals::gpu();
         SystemStats {
             cpu_percent: self.cpu.and_then(value).map(|v| v.clamp(0.0, 100.0)),
             memory_used_bytes,
@@ -98,6 +99,8 @@ impl Sampler {
                 .and_then(|items| plan::gpu_percent(&items)),
             network_received_per_second: sum(self.net_in),
             network_sent_per_second: sum(self.net_out),
+            gpu_temperature_celsius,
+            gpu_fan_rpm,
         }
     }
 }
@@ -124,7 +127,7 @@ fn value(counter: PDH_HCOUNTER) -> Option<f64> {
 }
 
 /// Every instance of a wildcard counter, as `(instance name, value)`.
-fn values(counter: PDH_HCOUNTER) -> Option<Vec<(String, f64)>> {
+pub(crate) fn values(counter: PDH_HCOUNTER) -> Option<Vec<(String, f64)>> {
     let mut bytes = 0_u32;
     let mut count = 0_u32;
     // SAFETY: a null buffer with size 0 asks for the size needed.
@@ -180,7 +183,7 @@ fn values(counter: PDH_HCOUNTER) -> Option<Vec<(String, f64)>> {
 
 /// # Safety
 /// `text` must be null or point at a NUL-terminated UTF-16 string.
-unsafe fn wide_string(text: *const u16) -> String {
+pub(crate) unsafe fn wide_string(text: *const u16) -> String {
     if text.is_null() {
         return String::new();
     }

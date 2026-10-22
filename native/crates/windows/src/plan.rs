@@ -1,6 +1,7 @@
 //! Decisions the Windows backend makes, kept free of Win32 calls so they are tested on every OS.
 
 use shiftpane_core::mode::{MAX_HEIGHT, MAX_PREPARE_SIZES, MAX_WIDTH, MIN_HEIGHT, MIN_WIDTH};
+use shiftpane_core::protocol::{Battery, ProcessLoad};
 
 /// How the driver's adapter is described in Windows (the INF's device description).
 pub const ADAPTER_DESCRIPTION: &str = "Virtual Display Driver";
@@ -166,6 +167,116 @@ pub fn parse_mode_args(args: &[String]) -> Result<Vec<(u32, u32)>, String> {
     Ok(sizes)
 }
 
+/// The program a process counter instance belongs to: `chrome#3` is `chrome`.
+pub fn program_name(instance: &str) -> &str {
+    instance.split_once('#').map_or(instance, |(name, _)| name)
+}
+
+/// The busiest programs from the process counters: a program's instances (`chrome`,
+/// `chrome#1`, ...) added together, the `_Total` and `Idle` pseudo-processes left out, and CPU
+/// as a share of the whole processor (the counter counts one core as 100). Busiest first, then
+/// by memory, at most `limit`.
+pub fn top_processes(
+    cpu: &[(String, f64)],
+    memory: &[(String, f64)],
+    logical_cpus: u32,
+    limit: usize,
+) -> Vec<ProcessLoad> {
+    let cores = f64::from(logical_cpus.max(1));
+    let mut programs: Vec<ProcessLoad> = Vec::new();
+    let mut entry = |name: &str| -> Option<usize> {
+        if name.is_empty() || name == "_Total" || name == "Idle" {
+            return None;
+        }
+        if let Some(index) = programs.iter().position(|p| p.name == name) {
+            return Some(index);
+        }
+        programs.push(ProcessLoad {
+            name: name.to_owned(),
+            cpu_percent: 0.0,
+            memory_bytes: None,
+        });
+        Some(programs.len() - 1)
+    };
+    let mut indexed: Vec<(usize, f64, bool)> = Vec::new();
+    for (instance, value) in cpu {
+        if let Some(index) = entry(program_name(instance)) {
+            indexed.push((index, *value, true));
+        }
+    }
+    for (instance, value) in memory {
+        if let Some(index) = entry(program_name(instance)) {
+            indexed.push((index, *value, false));
+        }
+    }
+    for (index, value, is_cpu) in indexed {
+        let program = &mut programs[index];
+        if is_cpu {
+            program.cpu_percent += value.max(0.0) / cores;
+        } else {
+            program.memory_bytes = Some(program.memory_bytes.unwrap_or(0.0) + value.max(0.0));
+        }
+    }
+    for program in &mut programs {
+        program.cpu_percent = program.cpu_percent.clamp(0.0, 100.0);
+    }
+    programs.sort_by(|a, b| {
+        b.cpu_percent.total_cmp(&a.cpu_percent).then_with(|| {
+            b.memory_bytes
+                .unwrap_or(0.0)
+                .total_cmp(&a.memory_bytes.unwrap_or(0.0))
+        })
+    });
+    programs.truncate(limit);
+    programs
+}
+
+/// `GetSystemPowerStatus` says there is no battery with this flag, and "unknown" with 255.
+const NO_BATTERY: u8 = 128;
+const UNKNOWN: u8 = 255;
+const CHARGING: u8 = 8;
+
+/// The battery from `GetSystemPowerStatus`'s fields, or `None` on a PC without one.
+pub fn battery(battery_flag: u8, life_percent: u8, life_seconds: u32) -> Option<Battery> {
+    if battery_flag == UNKNOWN || battery_flag & NO_BATTERY != 0 {
+        return None;
+    }
+    Some(Battery {
+        percent: (life_percent <= 100).then(|| f64::from(life_percent)),
+        charging: battery_flag & CHARGING != 0,
+        // u32::MAX: the OS can't tell, which it says whenever the PC is plugged in.
+        minutes_left: (life_seconds != u32::MAX).then(|| (f64::from(life_seconds) / 60.0).round()),
+    })
+}
+
+/// Degrees Celsius from a driver's tenths of a degree; zero means it reported nothing.
+pub fn deci_celsius(value: u32) -> Option<f64> {
+    (value > 0 && value < 2000).then(|| f64::from(value) / 10.0)
+}
+
+/// A drive's counter, by its instance name (`C:`); the `_Total` instance is never a drive.
+pub fn drive_counter(samples: &[(String, f64)], drive: &str) -> Option<f64> {
+    samples
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case(drive))
+        .map(|(_, value)| value.max(0.0))
+}
+
+/// The app's name from its executable: its file description when it has one ("Visual Studio
+/// Code"), otherwise the file name without `.exe` ("Code").
+pub fn exe_app_name(path: &str, description: Option<&str>) -> Option<String> {
+    if let Some(described) = description.map(str::trim).filter(|d| !d.is_empty()) {
+        return Some(described.to_owned());
+    }
+    let file = path.rsplit(['\\', '/']).next().unwrap_or(path);
+    let stem = file
+        .strip_suffix(".exe")
+        .or_else(|| file.strip_suffix(".EXE"))
+        .unwrap_or(file)
+        .trim();
+    (!stem.is_empty()).then(|| stem.to_owned())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -174,6 +285,71 @@ mod tests {
         list.iter().map(|s| (*s).to_owned()).collect()
     }
 
+    #[test]
+    fn adds_up_a_programs_processes_and_shares_the_cpu_among_cores() {
+        let cpu = vec![
+            ("chrome".to_owned(), 40.0),
+            ("chrome#1".to_owned(), 20.0),
+            ("Code".to_owned(), 30.0),
+            ("Idle".to_owned(), 700.0),
+            ("_Total".to_owned(), 800.0),
+        ];
+        let memory = vec![
+            ("chrome".to_owned(), 1.0e9),
+            ("chrome#1".to_owned(), 5.0e8),
+            ("Code".to_owned(), 7.0e8),
+        ];
+        let top = top_processes(&cpu, &memory, 8, 5);
+        assert_eq!(top.len(), 2);
+        assert_eq!(top[0].name, "chrome");
+        assert!((top[0].cpu_percent - 7.5).abs() < 1e-9);
+        assert_eq!(top[0].memory_bytes, Some(1.5e9));
+        assert_eq!(top[1].name, "Code");
+        assert_eq!(top_processes(&cpu, &memory, 8, 1).len(), 1);
+    }
+
+    #[test]
+    fn reads_the_battery_or_its_absence() {
+        assert_eq!(battery(128, 255, u32::MAX), None);
+        assert_eq!(battery(255, 255, u32::MAX), None);
+        let on_battery = battery(1, 82, 12_840).unwrap();
+        assert_eq!(on_battery.percent, Some(82.0));
+        assert!(!on_battery.charging);
+        assert_eq!(on_battery.minutes_left, Some(214.0));
+        let charging = battery(8 | 1, 40, u32::MAX).unwrap();
+        assert!(charging.charging);
+        assert_eq!(charging.minutes_left, None);
+    }
+
+    #[test]
+    fn turns_tenths_of_a_degree_into_degrees() {
+        assert_eq!(deci_celsius(0), None);
+        assert_eq!(deci_celsius(645), Some(64.5));
+        assert_eq!(deci_celsius(50_000), None);
+    }
+
+    #[test]
+    fn finds_a_drives_counter_by_its_letter() {
+        let samples = vec![("_Total".to_owned(), 9.0), ("C:".to_owned(), 4.0)];
+        assert_eq!(drive_counter(&samples, "c:"), Some(4.0));
+        assert_eq!(drive_counter(&samples, "D:"), None);
+    }
+
+    #[test]
+    fn names_an_app_by_its_description_or_its_file() {
+        assert_eq!(
+            exe_app_name(
+                r"C:\Program Files\VS Code\Code.exe",
+                Some("Visual Studio Code")
+            ),
+            Some("Visual Studio Code".to_owned())
+        );
+        assert_eq!(
+            exe_app_name(r"C:\Windows\explorer.exe", Some("  ")),
+            Some("explorer".to_owned())
+        );
+        assert_eq!(exe_app_name("", None), None);
+    }
     #[test]
     fn recognises_the_virtual_output_by_its_own_adapter() {
         assert!(is_virtual_display("Virtual Display Driver", ""));

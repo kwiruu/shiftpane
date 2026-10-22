@@ -8,17 +8,23 @@ use std::time::{Duration, Instant};
 
 use shiftpane_core::Mode;
 use shiftpane_core::protocol::{
-    DisplayInfo, ErrorCode, HelperError, MediaAction, MediaState, SystemStats,
+    ActiveWindow, AudioControlParams, AudioState, Battery, DisplayInfo, DriveInfo, ErrorCode,
+    HelperError, MediaAction, MediaState, ProcessLoad, SystemStats,
 };
 
 use crate::win32::{self, Adapter, CurrentMode};
-use crate::{DEFAULT_SETTINGS_PATH, elevated, media, plan, settings, stats};
+use crate::{
+    DEFAULT_SETTINGS_PATH, audio, disks, elevated, foreground, media, plan, power, processes,
+    settings, stats,
+};
 
-/// The performance counter query, opened the first time stats are asked for.
+/// The performance counter queries, each opened the first time it is asked for.
 #[derive(Debug, Default)]
 pub struct Stats {
     sampler: Option<stats::Sampler>,
     opened: bool,
+    disks: disks::Disks,
+    processes: processes::Processes,
 }
 
 // Reading stats cannot fail as a whole (missing parts are null), but the signature matches the
@@ -37,6 +43,36 @@ pub fn system_stats(state: &mut Stats) -> Result<SystemStats, HelperError> {
 
 pub fn media_state() -> Result<MediaState, HelperError> {
     media::state().map_err(|e| internal(format!("could not read the media controls: {e}")))
+}
+
+// The readings below cannot fail as a whole either: what can't be read is null or empty.
+#[allow(clippy::unnecessary_wraps)]
+pub fn disks(state: &mut Stats) -> Result<Vec<DriveInfo>, HelperError> {
+    Ok(state.disks.read())
+}
+
+#[allow(clippy::unnecessary_wraps)]
+pub fn processes(state: &mut Stats) -> Result<Vec<ProcessLoad>, HelperError> {
+    Ok(state.processes.read())
+}
+
+#[allow(clippy::unnecessary_wraps)]
+pub fn power() -> Result<Option<Battery>, HelperError> {
+    Ok(power::battery())
+}
+
+#[allow(clippy::unnecessary_wraps)]
+pub fn audio_state() -> Result<AudioState, HelperError> {
+    Ok(audio::state())
+}
+
+pub fn audio_control(params: AudioControlParams) -> Result<(), HelperError> {
+    audio::control(params).map_err(|e| internal(format!("could not change the volume: {e}")))
+}
+
+#[allow(clippy::unnecessary_wraps)]
+pub fn active_window() -> Result<ActiveWindow, HelperError> {
+    Ok(foreground::active())
 }
 
 pub fn media_control(action: MediaAction) -> Result<(), HelperError> {

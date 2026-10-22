@@ -2,7 +2,8 @@
 
 use crate::mode::Mode;
 use crate::protocol::{
-    BackendInfo, Capabilities, DisplayInfo, HelperError, MediaAction, MediaState, SystemStats,
+    ActiveWindow, AudioControlParams, AudioState, BackendInfo, Battery, Capabilities, DisplayInfo,
+    DriveInfo, HelperError, MediaAction, MediaState, ProcessLoad, SystemStats,
 };
 
 /// One virtual-monitor strategy for one OS.
@@ -52,6 +53,45 @@ pub trait DisplayBackend {
         let _ = action;
         Err(HelperError::unsupported(
             "media controls are not available on this OS yet",
+        ))
+    }
+
+    /// The readings behind widgets' system sources. Like the stats, an OS without one of them
+    /// keeps its default and the source stays empty.
+    fn disks(&mut self) -> Result<Vec<DriveInfo>, HelperError> {
+        Err(HelperError::unsupported(
+            "drives are not available on this OS yet",
+        ))
+    }
+
+    fn processes(&mut self) -> Result<Vec<ProcessLoad>, HelperError> {
+        Err(HelperError::unsupported(
+            "processes are not available on this OS yet",
+        ))
+    }
+
+    fn power(&mut self) -> Result<Option<Battery>, HelperError> {
+        Err(HelperError::unsupported(
+            "the battery is not available on this OS yet",
+        ))
+    }
+
+    fn audio_state(&mut self) -> Result<AudioState, HelperError> {
+        Err(HelperError::unsupported(
+            "audio is not available on this OS yet",
+        ))
+    }
+
+    fn audio_control(&mut self, params: AudioControlParams) -> Result<(), HelperError> {
+        let _ = params;
+        Err(HelperError::unsupported(
+            "audio is not available on this OS yet",
+        ))
+    }
+
+    fn active_window(&mut self) -> Result<ActiveWindow, HelperError> {
+        Err(HelperError::unsupported(
+            "the active window is not available on this OS yet",
         ))
     }
 }

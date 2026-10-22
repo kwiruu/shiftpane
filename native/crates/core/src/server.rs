@@ -5,8 +5,8 @@ use std::io::{self, BufRead, Write};
 use crate::backend::DisplayBackend;
 use crate::mode::{self, Mode};
 use crate::protocol::{
-    Call, CallResult, ErrorCode, HelloInfo, HelperError, Message, PROTOCOL_VERSION, Platform,
-    Request,
+    AudioControlParams, Call, CallResult, ErrorCode, HelloInfo, HelperError, Message,
+    PROTOCOL_VERSION, Platform, Request,
 };
 
 /// Requests longer than this are rejected without being parsed.
@@ -103,6 +103,25 @@ fn dispatch(call: &Call, backend: &mut dyn DisplayBackend) -> Result<CallResult,
         Call::MediaControl(params) => backend
             .media_control(params.action)
             .map(|()| CallResult::MediaControlled),
+        Call::Disks => backend.disks().map(|drives| CallResult::Disks { drives }),
+        Call::Processes => backend
+            .processes()
+            .map(|processes| CallResult::Processes { processes }),
+        Call::Power => backend.power().map(|battery| CallResult::Power { battery }),
+        Call::AudioState => backend.audio_state().map(CallResult::Audio),
+        Call::AudioControl(params) => {
+            if let AudioControlParams::SetVolume { percent } = params
+                && !(0.0..=100.0).contains(percent)
+            {
+                return Err(HelperError::invalid_params(
+                    "the volume has to be between 0 and 100",
+                ));
+            }
+            backend
+                .audio_control(*params)
+                .map(|()| CallResult::AudioControlled)
+        }
+        Call::ActiveWindow => backend.active_window().map(CallResult::ActiveWindow),
     }
 }
 
@@ -119,6 +138,7 @@ mod tests {
         attached: Option<Mode>,
         prepared: Vec<Vec<(u32, u32)>>,
         detach_calls: u32,
+        audio: Vec<AudioControlParams>,
     }
 
     impl DisplayBackend for FakeBackend {
@@ -151,6 +171,10 @@ mod tests {
                 primary: false,
                 virtual_display: true,
             })
+        }
+        fn audio_control(&mut self, params: AudioControlParams) -> Result<(), HelperError> {
+            self.audio.push(params);
+            Ok(())
         }
         fn detach(&mut self) -> Result<(), HelperError> {
             self.attached = None;
@@ -235,6 +259,44 @@ mod tests {
             );
         }
         assert_eq!(backend.prepared.len(), 0, "nothing may reach the backend");
+    }
+
+    #[test]
+    fn audio_control_takes_a_volume_only_within_range() {
+        let mut backend = FakeBackend::default();
+        let replies = run(
+            concat!(
+                "{\"id\":1,\"method\":\"audio.control\",\"params\":{\"action\":\"set-volume\",\"percent\":140}}
+",
+                "{\"id\":2,\"method\":\"audio.control\",\"params\":{\"action\":\"set-volume\",\"percent\":40}}
+",
+                "{\"id\":3,\"method\":\"audio.control\",\"params\":{\"action\":\"toggle-mute\"}}
+",
+            ),
+            &mut backend,
+        );
+        assert_eq!(replies[0]["error"]["code"], json!("invalidParams"));
+        assert_eq!(replies[1]["result"]["type"], json!("audioControlled"));
+        assert_eq!(
+            backend.audio,
+            vec![
+                AudioControlParams::SetVolume { percent: 40.0 },
+                AudioControlParams::ToggleMute
+            ]
+        );
+    }
+
+    #[test]
+    fn readings_an_os_lacks_are_unsupported() {
+        let mut backend = UnsupportedBackend::new("no virtual display support on this OS");
+        let replies = run(
+            "{\"id\":1,\"method\":\"power.state\"}
+{\"id\":2,\"method\":\"window.active\"}
+",
+            &mut backend,
+        );
+        assert_eq!(replies[0]["error"]["code"], json!("unsupported"));
+        assert_eq!(replies[1]["error"]["code"], json!("unsupported"));
     }
 
     #[test]
