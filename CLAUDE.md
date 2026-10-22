@@ -25,6 +25,10 @@ TypeScript, a Cargo workspace for the native helper. See README.md for the layou
   `packages/helper-client/src/protocol.ts`.
 - After changing `packages/widget-sdk/src/manifest.ts`, run `pnpm --filter @shiftpane/widget-sdk schema` (a test
   fails if the committed JSON Schema drifts).
+- Widget packages (the marketplace's format) are defined in `packages/widget-sdk` and drawn by `ViewWidget` in
+  `packages/board` from the same parts as the built-in widgets; give a new view node the built-in look by reusing
+  `parts.tsx`. Collectors run in `packages/widget-runtime` (QuickJS) from the desktop main process
+  (`main/widgets/`), and their only way out is the guarded fetch in `main/widgets/fetch.ts`.
 - OS-specific Rust goes behind `cfg` in `native/crates/{windows,macos,linux}`; every crate must still compile on every OS.
 - Electron windows keep `contextIsolation`, `sandbox` and no `nodeIntegration`; the renderer gets only `window.shiftpane`
   (typed in `apps/desktop/src/preload/api.ts`).
@@ -48,6 +52,8 @@ TypeScript, a Cargo workspace for the native helper. See README.md for the layou
   (`renderer/src/layout/`), and the PC keeps it (`main/board/`). The widgets and table rendering shared by both live
   in `packages/board`; apps import `@shiftpane/board/board.css` after Tailwind, which `@source`s the package.
 - Set `ELECTRON_SKIP_BINARY_DOWNLOAD=1` for installs that never launch Electron (CI lint jobs do).
+- QuickJS's own memory limit does nothing in the WebAssembly build (it can't measure allocations), so the widget
+  sandbox caps its `WebAssembly.Memory` instead (`packages/widget-runtime/src/run.ts`). Run collectors one at a time.
 - Streaming the virtual monitor: the main process arms the one `desktopCapturer` source (`main/stream/gate.ts`) and the
   window takes it with `getDisplayMedia`; the session grants media permission only for that request. A source's
   `display_id` is empty until `screen.getAllDisplays()` has run, and the helper's GDI device name is not Electron's
