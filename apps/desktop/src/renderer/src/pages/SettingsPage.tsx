@@ -131,7 +131,7 @@ export function SettingsPage({
             <p className="font-medium text-sm">Developer mode</p>
             <p className="mt-1 text-ink-muted text-sm">
               Load widgets from a folder on this PC, to make your own or try one before it's in the
-              marketplace. Find it under Marketplace, Installed.
+              marketplace. Find it under Widgets, Installed.
             </p>
           </div>
           <Segmented

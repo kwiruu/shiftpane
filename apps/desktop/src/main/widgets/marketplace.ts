@@ -1,19 +1,15 @@
 import { openPackage, type PackageTexts, packageTexts } from '@shiftpane/widget-runtime'
 import {
-  canSendOffPc,
   compareVersions,
-  configDefaults,
-  describePermissions,
   type IndexEntry,
   type IndexVersion,
   MARKETPLACE_URL,
   type Permissions,
   type RevokedList,
   readPackage,
-  reservedIds,
   type WidgetPackage,
 } from '@shiftpane/widget-sdk'
-import type { FolderCheck, StoreEntry, StoreList } from '../../shared/widgets.ts'
+import type { FolderCheck } from '../../shared/widgets.ts'
 import type { InstalledWidgets, StoreNote } from './installed.ts'
 import type { Registry } from './registry.ts'
 
@@ -40,9 +36,10 @@ function samePermissions(a: Permissions, b: Permissions): boolean {
 }
 
 /**
- * The marketplace from the desktop app: what it offers (each with a preview from its verified
- * package), installing a version after the same permission prompt as a folder, and keeping the
- * installed ones honest: a revoked version stops running at once, a newer one is offered.
+ * The marketplace from the desktop app. Browsing happens on the website; here, an install link
+ * gets a widget's version from the signed index and installs it after the same permission prompt
+ * as a folder, and the installed ones are kept honest: a revoked version stops running at once, a
+ * newer one is offered.
  */
 export class Marketplace {
   readonly #options: MarketplaceOptions
@@ -137,64 +134,6 @@ export class Marketplace {
       throw new Error('The package asks for other permissions than the marketplace lists.')
     }
     return { widget: read.widget, texts }
-  }
-
-  /** What the marketplace offers, newest first by name. */
-  async list(force = false): Promise<StoreList> {
-    let index: Awaited<ReturnType<Registry['index']>>
-    try {
-      index = await this.#options.registry.index(force)
-    } catch (error) {
-      return { ok: false, problem: (error as Error).message }
-    }
-    this.#notes()
-    const installed = new Map(this.#options.installed.entries().map((entry) => [entry.id, entry]))
-    const widgets = await Promise.all(
-      index.widgets.map(async (entry): Promise<StoreEntry> => {
-        const picked = this.#pick(entry)
-        const latest = entry.versions[entry.latest]
-        const shown = picked?.[1] ?? latest
-        let preview: StoreEntry['preview'] = null
-        if (picked) {
-          try {
-            const { widget } = await this.#read(entry.id, picked[0], picked[1])
-            preview = {
-              view: widget.view,
-              sample: widget.sample,
-              sizes: widget.manifest.sizes,
-              actions: widget.manifest.permissions.actions,
-              sources: widget.manifest.permissions.sources,
-              config: configDefaults(widget.manifest.config) as Record<
-                string,
-                string | number | boolean
-              >,
-            }
-          } catch (error) {
-            this.#log(`${entry.id}: ${(error as Error).message}`)
-          }
-        }
-        const mine = installed.get(entry.id)
-        return {
-          id: entry.id,
-          name: entry.name,
-          summary: entry.summary,
-          author: entry.author.login,
-          categories: entry.categories,
-          latest: entry.latest,
-          version: picked?.[0] ?? null,
-          needsApp:
-            !picked && latest && compareVersions(this.#options.appVersion, latest.minAppVersion) < 0
-              ? latest.minAppVersion
-              : null,
-          permissions: shown ? describePermissions(shown.permissions) : [],
-          sendsOffPc: shown ? canSendOffPc(shown.permissions) : false,
-          preview,
-          installed: mine ? { version: mine.version, from: mine.origin.kind } : null,
-          builtIn: reservedIds.includes(entry.id),
-        }
-      }),
-    )
-    return { ok: true, widgets: widgets.sort((a, b) => a.name.localeCompare(b.name)) }
   }
 
   /**

@@ -19,7 +19,7 @@ const HELP = `shiftpane-widget ${VERSION}: check, run and pack ShiftPane widgets
 
 Secrets a widget declares are read from environment variables of the same name, such as
 GITHUB_TOKEN. To see it on your phone: in ShiftPane, turn on Developer mode in Settings, then
-Marketplace > Installed > Choose a folder. It reloads when you save.
+Widgets > Installed > Choose a folder. It reloads when you save.
 `
 
 const color = process.stdout.isTTY && !process.env.NO_COLOR

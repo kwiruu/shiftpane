@@ -11,7 +11,6 @@ import type {
   InstalledInfo,
   InstallResult,
   ShareResult,
-  StoreList,
 } from '../shared/widgets.ts'
 import type { ShiftPaneApi } from './api.ts'
 
@@ -93,8 +92,6 @@ const api: ShiftPaneApi = {
       ipcRenderer.invoke(IpcChannel.widgetsShare, id, notes) as Promise<ShareResult>,
   },
   store: {
-    list: (refresh) =>
-      ipcRenderer.invoke(IpcChannel.storeList, refresh === true) as Promise<StoreList>,
     check: (id) => ipcRenderer.invoke(IpcChannel.storeCheck, id) as Promise<FolderCheck>,
     onOpen: (listener) => {
       const handler = (_event: IpcRendererEvent, id: string) => listener(id)

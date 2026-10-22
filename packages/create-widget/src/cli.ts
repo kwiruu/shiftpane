@@ -4,7 +4,7 @@ import { createInterface } from 'node:readline/promises'
 import { parseArgs } from 'node:util'
 import { type Answers, idFrom, type Template, templates, widgetFiles } from './templates.ts'
 
-const HELP = `npm create shiftpane-widget [folder] -- [--template pc|web] [--name "My widget"] [--author <github login>]
+const HELP = `npx create-shiftpane-widget [folder] [--template pc|web] [--name "My widget"] [--author <github login>] [--yes]
 
   pc   reads the PC's CPU, with no code
   web  a collector that fetches from one host (GitHub, to start)
@@ -68,7 +68,7 @@ async function main(): Promise<number> {
   npm run dev        checks it${answers.template === 'web' ? ' and runs the collector' : ''}, again on every save
 
 To see it on your phone, turn on Developer mode in ShiftPane's Settings, then pick the folder
-under Marketplace > Installed > Choose a folder.`)
+under Widgets > Installed > Choose a folder.`)
   return 0
 }
 
