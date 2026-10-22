@@ -4,7 +4,8 @@ import {
   type DropAt,
   isFlipped,
   moveWidget,
-  newId,
+  type NewWidget,
+  newWidgetId,
   placeTable,
   removeWidget,
   screenLayout,
@@ -12,7 +13,7 @@ import {
   setCrop,
 } from '@shiftpane/board'
 import { SPLIT_PRESETS, type SplitPreset } from '@shiftpane/layout'
-import type { MonitorSource, ScreenTurn, WidgetKind } from '@shiftpane/protocol'
+import type { MonitorSource, ScreenTurn } from '@shiftpane/protocol'
 import { useEffect, useRef, useState } from 'react'
 import type { ConnectedPhone } from '../../../shared/pairing.ts'
 import { Button, Card, Select } from '../shell/parts.tsx'
@@ -250,8 +251,8 @@ export function LayoutEditor({ phones }: { phones: ConnectedPhone[] }) {
    * Puts a widget on the table being edited: at `at` when it was dropped on a widget, which
    * pushes that one along, and otherwise at the end.
    */
-  const addKind = (kind: WidgetKind, at: DropAt | null) => {
-    const id = newId(board, kind)
+  const addKind = (kind: NewWidget, at: DropAt | null) => {
+    const id = newWidgetId(board, kind)
     const added = addWidget(board, table.id, kind)
     if (added.board === board) return
     const landed = added.board.tables.find((item) => item.id === added.tableId)

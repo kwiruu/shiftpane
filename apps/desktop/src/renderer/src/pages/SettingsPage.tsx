@@ -5,8 +5,11 @@ import type { DisplayState } from '../../../shared/display.ts'
 import type { FirewallState } from '../../../shared/firewall.ts'
 import type { PairingState } from '../../../shared/pairing.ts'
 import { FirewallNotice } from '../FirewallNotice.tsx'
+import { Segmented } from '../layout/controls.tsx'
 import { Logo } from '../shell/Logo.tsx'
 import { Button, Card, Dot } from '../shell/parts.tsx'
+import { useInstalled } from '../useInstalled.ts'
+import { useSettings } from '../useSettings.ts'
 import { DisplayCard } from './DevicesPage.tsx'
 
 const PLATFORM_LABEL = { windows: 'Windows', macos: 'macOS', linux: 'Linux' } as const
@@ -48,6 +51,8 @@ export function SettingsPage({
   onBoard: (board: Board) => void
 }) {
   const [confirmReset, setConfirmReset] = useState(false)
+  const [settings, setSettings] = useSettings()
+  const installed = useInstalled()
   const { platform, versions } = window.shiftpane
   const phones = pairing.status === 'ready' ? pairing.phones : []
   const widgets = board.tables.reduce((total, table) => total + table.widgets.length, 0)
@@ -118,6 +123,30 @@ export function SettingsPage({
         >
           {confirmReset ? 'Click again to replace every table' : 'Reset to the default tables'}
         </Button>
+      </Card>
+
+      <Card title="Developer" icon="widget-add">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <p className="font-medium text-sm">Developer mode</p>
+            <p className="mt-1 text-ink-muted text-sm">
+              Load widgets from a folder on this PC, to make your own or try one before it's in the
+              marketplace. Find it under Marketplace, Installed.
+            </p>
+          </div>
+          <Segmented
+            label="Developer mode"
+            options={[
+              { value: 'off', label: 'Off' },
+              { value: 'on', label: 'On' },
+            ]}
+            value={settings.developerMode ? 'on' : 'off'}
+            onChange={(next) => setSettings({ developerMode: next === 'on' })}
+          />
+        </div>
+        <div className="mt-3">
+          <Fact label="Installed widgets">{installed.length}</Fact>
+        </div>
       </Card>
     </div>
   )

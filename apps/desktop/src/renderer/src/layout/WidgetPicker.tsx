@@ -1,7 +1,52 @@
-import { type PcData, WIDGET_KINDS, WidgetCard } from '@shiftpane/board'
-import { type WidgetKind, WidgetKind as WidgetKinds } from '@shiftpane/protocol'
+import {
+  type CardWidget,
+  type NewWidget,
+  newInstalledWidget,
+  type PcData,
+  WIDGET_KINDS,
+  WidgetCard,
+} from '@shiftpane/board'
+import { WidgetKind as WidgetKinds } from '@shiftpane/protocol'
 import { type PointerEvent, type ReactNode, type RefObject, useRef, useState } from 'react'
 import { Card } from '../shell/parts.tsx'
+
+/** One widget the picker offers: a built-in kind or an installed widget. */
+interface Choice {
+  key: string
+  widget: NewWidget
+  card: CardWidget
+  name: string
+  description: string
+  wide: boolean
+}
+
+/** Every widget that can go on a table: the built-in ones, then the ones installed on this PC. */
+function choices(data: PcData): Choice[] {
+  return [
+    ...WidgetKinds.options.map((kind) => {
+      const info = WIDGET_KINDS[kind]
+      return {
+        key: kind,
+        widget: kind,
+        card: { kind, tone: info.tone },
+        name: info.name,
+        description: info.description,
+        wide: info.columns === 2,
+      }
+    }),
+    ...data.installed.map((installed) => {
+      const widget = newInstalledWidget(installed)
+      return {
+        key: `installed:${installed.id}`,
+        widget,
+        card: { kind: 'installed' as const, widget: installed.id, tone: widget.tone },
+        name: installed.name,
+        description: `Installed on this PC · v${installed.version}`,
+        wide: widget.columns === 2,
+      }
+    }),
+  ]
+}
 
 /** A press that moves this far (CSS pixels) is a drag, not a click. */
 const DRAG_SLOP = 6
@@ -10,7 +55,7 @@ const DRAG_SLOP = 6
 const GHOST_WIDTH = 116
 
 interface Drag {
-  kind: WidgetKind
+  choice: Choice
   x: number
   y: number
   dragging: boolean
@@ -39,11 +84,11 @@ export function WidgetPicker({
   tableNumber: number
   /** Scrolled into view when an empty cell in the preview is clicked. */
   gridRef: RefObject<HTMLDivElement | null>
-  onAdd: (kind: WidgetKind) => void
+  onAdd: (widget: NewWidget) => void
   /** The pointer moved while dragging a widget out of the picker. */
   onDragTo: (x: number, y: number) => void
   /** The drag ended over this point; the editor decides where it lands. */
-  onDrop: (kind: WidgetKind, x: number, y: number) => void
+  onDrop: (widget: NewWidget, x: number, y: number) => void
   /** The drag was called off, so the editor can drop its hint. */
   onCancel: () => void
 }) {
@@ -52,10 +97,10 @@ export function WidgetPicker({
   const dropped = useRef(false)
   const [drag, setDrag] = useState<Drag | null>(null)
 
-  const onPointerDown = (event: PointerEvent<HTMLElement>, kind: WidgetKind) => {
+  const onPointerDown = (event: PointerEvent<HTMLElement>, choice: Choice) => {
     if (event.button !== 0) return
     event.currentTarget.setPointerCapture(event.pointerId)
-    press.current = { kind, x: event.clientX, y: event.clientY, dragging: false }
+    press.current = { choice, x: event.clientX, y: event.clientY, dragging: false }
   }
 
   const onPointerMove = (event: PointerEvent<HTMLElement>) => {
@@ -78,7 +123,7 @@ export function WidgetPicker({
     if (!current?.dragging) return
     // The click that follows this drag is not a click on the widget; `onClick` swallows it.
     dropped.current = true
-    onDrop(current.kind, event.clientX, event.clientY)
+    onDrop(current.choice.widget, event.clientX, event.clientY)
   }
 
   const onPointerCancel = () => {
@@ -87,32 +132,31 @@ export function WidgetPicker({
     onCancel()
   }
 
-  const ghost = drag?.dragging ? drag.kind : null
-  const ghostWide = ghost ? WIDGET_KINDS[ghost].columns === 2 : false
+  const ghost = drag?.dragging ? drag.choice : null
+  const ghostWide = ghost?.wide ?? false
 
   return (
     <Card title="Add a widget" icon="widget-add" bodyClassName="overflow-hidden">
       {editor}
       <div ref={gridRef} className="min-h-0 flex-1 overflow-y-auto p-4 [scrollbar-width:thin]">
         <div className="grid grid-flow-row-dense grid-cols-2 gap-x-2.5 gap-y-3">
-          {WidgetKinds.options.map((kind) => {
-            const info = WIDGET_KINDS[kind]
-            const wide = info.columns === 2
+          {choices(data).map((choice) => {
+            const wide = choice.wide
             return (
               <button
-                key={kind}
+                key={choice.key}
                 type="button"
-                title={`${info.description} · drag it onto the phone, or click to add it`}
-                onPointerDown={(event) => onPointerDown(event, kind)}
+                title={`${choice.description} · drag it onto the phone, or click to add it`}
+                onPointerDown={(event) => onPointerDown(event, choice)}
                 onPointerMove={onPointerMove}
                 onPointerUp={onPointerUp}
                 onPointerCancel={onPointerCancel}
                 onClick={() => {
                   if (dropped.current) dropped.current = false
-                  else onAdd(kind)
+                  else onAdd(choice.widget)
                 }}
                 className={`group touch-none select-none text-left ${wide ? 'col-span-2' : ''} ${
-                  drag?.dragging && drag.kind === kind ? 'opacity-40' : ''
+                  drag?.dragging && drag.choice.key === choice.key ? 'opacity-40' : ''
                 }`}
               >
                 <div
@@ -122,7 +166,7 @@ export function WidgetPicker({
                   }`}
                 >
                   <WidgetCard
-                    widget={{ kind, tone: info.tone }}
+                    widget={choice.card}
                     radius={14}
                     data={data}
                     connected
@@ -130,7 +174,7 @@ export function WidgetPicker({
                   />
                 </div>
                 <p className="mt-1.5 cursor-grab font-medium text-ink-soft text-xs group-hover:text-ink">
-                  {info.name}
+                  {choice.name}
                 </p>
               </button>
             )
@@ -159,7 +203,7 @@ export function WidgetPicker({
             style={{ aspectRatio: ghostWide ? '2.2 / 1' : '1 / 1' }}
           >
             <WidgetCard
-              widget={{ kind: ghost, tone: WIDGET_KINDS[ghost].tone }}
+              widget={ghost.card}
               radius={14}
               data={data}
               connected
