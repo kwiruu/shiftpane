@@ -1,8 +1,9 @@
 import type { ConfigField } from '@shiftpane/widget-sdk'
 import { useState } from 'react'
-import type { InstalledInfo } from '../../../shared/widgets.ts'
+import type { InstalledInfo, ShareResult } from '../../../shared/widgets.ts'
 import { Segmented } from '../layout/controls.tsx'
 import { Button, Chip, Select } from '../shell/parts.tsx'
+import { useAccount } from '../useAccount.ts'
 import { Dialog } from './Dialog.tsx'
 import { PermissionList, SendsOffPc } from './Permissions.tsx'
 
@@ -95,6 +96,7 @@ export function WidgetSettings({
         <ConfigForm key={`${widget.id}:${widget.updatedAt}`} widget={widget} />
       )}
       {widget.secrets.length > 0 && <Secrets widget={widget} />}
+      {developer && widget.origin.kind === 'folder' && <Share key={widget.id} widget={widget} />}
 
       <h3 className="section-label mt-6 mb-3">What it can do</h3>
       <PermissionList lines={widget.permissions} />
@@ -330,5 +332,101 @@ function Secret({
       </div>
       {problem && <p className="mt-1 text-danger text-xs">{problem}</p>}
     </form>
+  )
+}
+
+/**
+ * Sending a widget made in a folder to the marketplace for review: signed in with a code typed on
+ * github.com, as the author the manifest names.
+ */
+function Share({ widget }: { widget: InstalledInfo }) {
+  const account = useAccount()
+  const [notes, setNotes] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<ShareResult | null>(null)
+  const share = async () => {
+    setBusy(true)
+    setResult(await window.shiftpane.widgets.share(widget.id, notes))
+    setBusy(false)
+  }
+  return (
+    <div className="mt-6">
+      <h3 className="section-label mb-1.5">Share to the marketplace</h3>
+      <p className="mb-3 text-ink-muted text-xs">
+        Packs this folder like shiftpane-widget pack and sends it for review. It shows on the site
+        once a person has approved it.
+      </p>
+      {account.status === 'signed-out' && (
+        <div className="flex items-center gap-3">
+          <Button size="md" onClick={() => void window.shiftpane.account.signIn()}>
+            Sign in with GitHub
+          </Button>
+          {account.problem && <p className="text-danger text-xs">{account.problem}</p>}
+        </div>
+      )}
+      {account.status === 'waiting' && (
+        <div className="rounded-lg border border-border bg-surface px-3 py-2.5 text-sm">
+          <p className="text-ink-soft">
+            Type this code at{' '}
+            <span className="font-mono">{account.verificationUri.replace('https://', '')}</span>,
+            which just opened in your browser:
+          </p>
+          <div className="mt-2 flex items-center justify-between gap-3">
+            <span className="select-text font-mono text-ink text-xl tracking-[0.2em]">
+              {account.userCode}
+            </span>
+            <Button tone="ghost" onClick={() => void window.shiftpane.account.cancel()}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      )}
+      {account.status === 'signed-in' && (
+        <div className="flex flex-col gap-2">
+          <p className="flex items-center justify-between text-ink-soft text-sm">
+            <span>
+              Signed in as <span className="font-mono">{account.login}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => void window.shiftpane.account.signOut()}
+              className="text-ink-muted text-xs hover:text-ink"
+            >
+              Sign out
+            </button>
+          </p>
+          {widget.author.toLowerCase() !== account.login.toLowerCase() && (
+            <p className="text-warn text-xs">
+              Its manifest says the author is {widget.author}; the marketplace takes it only from
+              that GitHub account.
+            </p>
+          )}
+          <input
+            className="h-9 w-full rounded-lg border border-border bg-surface px-3 text-sm outline-none placeholder:text-ink-faint focus:border-border-strong"
+            placeholder="What's new in this version (optional)"
+            maxLength={500}
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+          />
+          <div className="flex justify-end">
+            <Button tone="primary" size="md" disabled={busy} onClick={() => void share()}>
+              Share v{widget.version}
+            </Button>
+          </div>
+        </div>
+      )}
+      {result?.ok && (
+        <p className="mt-2 text-ok text-xs">
+          Sent {result.widgetId} {result.version} for review ({result.status.replace('_', ' ')}).
+        </p>
+      )}
+      {result && !result.ok && (
+        <ul className="mt-2 flex list-disc flex-col gap-1 pl-5 text-danger text-xs">
+          {result.problems.map((problem) => (
+            <li key={problem}>{problem}</li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }

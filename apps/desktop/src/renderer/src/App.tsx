@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { LayoutEditor } from './layout/LayoutEditor.tsx'
 import { DevicesPage } from './pages/DevicesPage.tsx'
 import { MarketplacePage } from './pages/MarketplacePage.tsx'
@@ -24,6 +24,18 @@ export function App() {
   const display = useDisplay()
   const [board, setBoard] = useBoard()
   const [view, setView] = useState<View>('devices')
+  // A widget an install link (shiftpane://install/<id>) asked for, until the Marketplace shows it.
+  const [openId, setOpenId] = useState<string | null>(null)
+  useEffect(() => {
+    const open = (id: string) => {
+      setView('marketplace')
+      setOpenId(id)
+    }
+    void window.shiftpane.store.takeOpen().then((id) => {
+      if (id) open(id)
+    })
+    return window.shiftpane.store.onOpen(open)
+  }, [])
   const phones = pairing.status === 'ready' ? pairing.phones : []
   // Only the pages that show widgets keep the sample data ticking.
   const sampleUser = view === 'marketplace'
@@ -41,7 +53,12 @@ export function App() {
           )}
           {view === 'layout' && <LayoutEditor phones={phones} />}
           {view === 'marketplace' && sampleUser && (
-            <Marketplace board={board} onChange={setBoard} />
+            <Marketplace
+              board={board}
+              onChange={setBoard}
+              openId={openId}
+              onOpened={() => setOpenId(null)}
+            />
           )}
           {view === 'settings' && (
             <SettingsPage

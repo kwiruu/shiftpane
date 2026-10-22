@@ -65,11 +65,13 @@ export function InstallPrompt({
     }
   }
   const update = ready?.replaces
+  // A name that is itself a question ("Is my PC busy?") keeps one question mark.
+  const name = ready?.widget.name.replace(/\?$/, '') ?? ''
   const title = !ready
     ? ''
     : update
-      ? `Update ${ready.widget.name} to ${ready.widget.version}?`
-      : `Install ${ready.widget.name}?`
+      ? `Update ${name} to ${ready.widget.version}?`
+      : `Install ${name}?`
 
   return (
     <Dialog

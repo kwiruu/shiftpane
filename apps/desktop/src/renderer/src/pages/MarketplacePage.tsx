@@ -10,15 +10,16 @@ import {
 import { type Board, type WidgetKind, WidgetKind as WidgetKinds } from '@shiftpane/protocol'
 import { Icon } from '@shiftpane/ui/icons'
 import { type ReactNode, useEffect, useState } from 'react'
-import type { FolderCheck } from '../../../shared/widgets.ts'
+import type { FolderCheck, InstalledInfo, StoreEntry } from '../../../shared/widgets.ts'
 import { InstallPrompt } from '../installed/InstallPrompt.tsx'
 import { WidgetSettings } from '../installed/WidgetSettings.tsx'
 import { Button, Card, Chip } from '../shell/parts.tsx'
 import { useInstalled } from '../useInstalled.ts'
 import { useSettings } from '../useSettings.ts'
+import { type StoreState, useStore } from '../useStore.ts'
 
 type Category = 'Time' | 'PC' | 'Media'
-type Filter = Category | 'All' | 'Installed'
+type Filter = Category | 'All' | 'Installed' | 'Get widgets'
 
 const CATEGORY: Record<WidgetKind, Category> = {
   clock: 'Time',
@@ -31,7 +32,7 @@ const CATEGORY: Record<WidgetKind, Category> = {
   media: 'Media',
 }
 
-const FILTERS: Filter[] = ['All', 'Time', 'PC', 'Media', 'Installed']
+const FILTERS: Filter[] = ['All', 'Time', 'PC', 'Media', 'Installed', 'Get widgets']
 
 /** How long an "Added" confirmation stays on a card. */
 const ADDED_MS = 2000
@@ -41,24 +42,40 @@ const keyOf = (what: NewWidget) => (typeof what === 'string' ? what : `installed
 
 /**
  * Widgets to put on the phone, each with a live preview: the built-in ones, the ones installed
- * on this PC, and (in Developer mode) loading one from a folder. Community widgets come later.
+ * on this PC, the marketplace's ("Get widgets"), and (in Developer mode) loading one from a folder.
  */
 export function MarketplacePage({
   board,
   onChange,
   data,
+  openId,
+  onOpened,
 }: {
   board: Board
   onChange: (board: Board) => void
   data: PcData
+  /** A widget an install link asked for: shown in "Get widgets" with its install prompt. */
+  openId?: string | null
+  onOpened?: () => void
 }) {
   const installed = useInstalled()
+  const store = useStore()
   const [settings] = useSettings()
   const developer = settings.developerMode
   const [filter, setFilter] = useState<Filter>('All')
   const [added, setAdded] = useState<{ key: string; table: number } | null>(null)
   const [check, setCheck] = useState<Exclude<FolderCheck, { status: 'canceled' }> | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
+
+  // An install link: the marketplace tab, and the prompt for that widget.
+  useEffect(() => {
+    if (!openId) return
+    setFilter('Get widgets')
+    onOpened?.()
+    void window.shiftpane.store.check(openId).then((result) => {
+      if (result.status !== 'canceled') setCheck(result)
+    })
+  }, [openId, onOpened])
 
   useEffect(() => {
     if (!added) return
@@ -67,13 +84,19 @@ export function MarketplacePage({
   }, [added])
 
   const builtIns = (category: Filter) =>
-    category === 'Installed'
+    category === 'Installed' || category === 'Get widgets'
       ? []
       : WidgetKinds.options.filter((kind) => category === 'All' || CATEGORY[kind] === category)
   const showsInstalled = filter === 'All' || filter === 'Installed'
-  const count = (category: Filter) =>
-    builtIns(category).length +
-    (category === 'All' || category === 'Installed' ? installed.length : 0)
+  const count = (category: Filter) => {
+    if (category === 'Get widgets') {
+      return 'ok' in store.state && store.state.ok ? String(store.state.widgets.length) : '·'
+    }
+    return (
+      builtIns(category).length +
+      (category === 'All' || category === 'Installed' ? installed.length : 0)
+    )
+  }
 
   const onBoard = (key: string) =>
     board.tables.reduce(
@@ -96,6 +119,15 @@ export function MarketplacePage({
       key: keyOf(what),
       table: result.board.tables.findIndex((t) => t.id === result.tableId) + 1,
     })
+  }
+
+  /** Checks a marketplace widget for the install prompt: a first install or an update. */
+  const getFromStore = async (id: string) => {
+    const result = await window.shiftpane.store.check(id)
+    if (result.status !== 'canceled') {
+      setEditing(null)
+      setCheck(result)
+    }
   }
 
   const loadFolder = async (reload?: string) => {
@@ -172,16 +204,31 @@ export function MarketplacePage({
                 <WidgetTile
                   key={`installed:${item.id}`}
                   title={item.name}
-                  chip="From a folder"
+                  chip={item.origin.kind === 'folder' ? 'From a folder' : 'Installed'}
                   widget={{ kind: 'installed', widget: item.id, tone: fresh.tone }}
                   wide={fresh.columns === 2}
                   description={item.description}
                   meta={`v${item.version} · ${item.author}`}
-                  problem={item.status.problem}
+                  problem={
+                    item.revoked !== null
+                      ? `Withdrawn from the marketplace: ${item.revoked}`
+                      : item.status.problem
+                  }
+                  extra={
+                    item.update && (
+                      <Button
+                        icon="refresh"
+                        className="mt-2"
+                        onClick={() => void getFromStore(item.id)}
+                      >
+                        Update to {item.update}
+                      </Button>
+                    )
+                  }
                   used={onBoard(keyOf(fresh))}
                   justAdded={added?.key === keyOf(fresh) ? added.table : null}
                   data={data}
-                  onAdd={() => add(fresh)}
+                  onAdd={item.revoked === null ? () => add(fresh) : undefined}
                   onSettings={() => setEditing(item.id)}
                 />
               )
@@ -212,10 +259,23 @@ export function MarketplacePage({
             <li className="sm:col-span-2">
               <Placeholder
                 icon="marketplace"
-                title="Community widgets"
-                text="Widgets made by others, installed from here. Coming soon."
-              />
+                title="More widgets"
+                text="Widgets made by others, from the ShiftPane marketplace. Each says what it can do before it's installed."
+              >
+                <Button tone="primary" size="md" onClick={() => setFilter('Get widgets')}>
+                  Get widgets
+                </Button>
+              </Placeholder>
             </li>
+          )}
+          {filter === 'Get widgets' && (
+            <StoreSection
+              state={store.state}
+              data={store.data}
+              installed={installed}
+              onRefresh={store.refresh}
+              onInstall={(id) => void getFromStore(id)}
+            />
           )}
         </ul>
       </div>
@@ -252,6 +312,8 @@ function WidgetTile({
   data,
   onAdd,
   onSettings,
+  extra,
+  action,
 }: {
   title: string
   chip: string
@@ -264,8 +326,13 @@ function WidgetTile({
   /** The table it just went on, while the confirmation shows. */
   justAdded: number | null
   data: PcData
-  onAdd: () => void
+  /** Without it, there is no Add button (a withdrawn widget, one not installed yet). */
+  onAdd?: () => void
   onSettings?: () => void
+  /** Under the description, such as an update button. */
+  extra?: ReactNode
+  /** In place of Add, such as Install. */
+  action?: ReactNode
 }) {
   return (
     <li className={wide ? 'sm:col-span-2' : ''}>
@@ -306,15 +373,19 @@ function WidgetTile({
               {used > 0 ? ` · on your phone ${used === 1 ? 'once' : `${used} times`}` : ''}
             </p>
             {problem && <p className="mt-1.5 text-warn text-xs">{problem}</p>}
+            {extra}
           </div>
-          <Button
-            tone={justAdded !== null ? 'raised' : 'primary'}
-            icon={justAdded !== null ? 'check' : 'add'}
-            onClick={onAdd}
-            className={justAdded !== null ? 'text-ok' : ''}
-          >
-            {justAdded !== null ? `Table ${justAdded}` : 'Add'}
-          </Button>
+          {action ??
+            (onAdd && (
+              <Button
+                tone={justAdded !== null ? 'raised' : 'primary'}
+                icon={justAdded !== null ? 'check' : 'add'}
+                onClick={onAdd}
+                className={justAdded !== null ? 'text-ok' : ''}
+              >
+                {justAdded !== null ? `Table ${justAdded}` : 'Add'}
+              </Button>
+            ))}
         </div>
       </Card>
     </li>
@@ -343,5 +414,140 @@ function Placeholder({
         {children && <div className="mt-4">{children}</div>}
       </div>
     </div>
+  )
+}
+
+/** What the marketplace offers, each with an Install (or Update) that opens the permission prompt. */
+function StoreSection({
+  state,
+  data,
+  installed,
+  onRefresh,
+  onInstall,
+}: {
+  state: StoreState
+  data: PcData
+  /** What is installed now, which may be newer than the list. */
+  installed: InstalledInfo[]
+  onRefresh: () => void
+  onInstall: (id: string) => void
+}) {
+  if (!('ok' in state)) {
+    return (
+      <li className="sm:col-span-2">
+        <Placeholder
+          icon="marketplace"
+          title="Reading the marketplace"
+          text="Checking what it offers against its signature."
+        />
+      </li>
+    )
+  }
+  if (!state.ok) {
+    return (
+      <li className="sm:col-span-2">
+        <Placeholder
+          icon="marketplace"
+          title="The marketplace isn't available"
+          text={state.problem}
+        >
+          <Button icon="refresh" size="md" onClick={onRefresh}>
+            Try again
+          </Button>
+        </Placeholder>
+      </li>
+    )
+  }
+  return (
+    <>
+      {state.widgets.map((widget) => (
+        <StoreTile
+          key={widget.id}
+          widget={widget}
+          mine={installed.find((item) => item.id === widget.id)}
+          data={data}
+          onInstall={onInstall}
+        />
+      ))}
+      <li>
+        <Placeholder
+          icon="marketplace"
+          title="Make your own"
+          text="npm create shiftpane-widget, then share it from here in Developer mode."
+        >
+          <Button icon="refresh" size="md" onClick={onRefresh}>
+            Check again
+          </Button>
+        </Placeholder>
+      </li>
+    </>
+  )
+}
+
+function StoreTile({
+  widget,
+  mine: installedNow,
+  data,
+  onInstall,
+}: {
+  widget: StoreEntry
+  mine: InstalledInfo | undefined
+  data: PcData
+  onInstall: (id: string) => void
+}) {
+  const wide = widget.preview ? !widget.preview.sizes.includes('small') : false
+  const mine = installedNow && { version: installedNow.version, from: installedNow.origin.kind }
+  // A widget that comes with the app is shown as the app draws it.
+  const builtInKind = (WidgetKinds.options as readonly string[]).includes(widget.id)
+    ? (widget.id as WidgetKind)
+    : null
+  let action: ReactNode
+  let note: string | null = null
+  if (widget.builtIn) {
+    note = 'This one comes with ShiftPane: find it under Built in.'
+  } else if (!widget.version) {
+    note = widget.needsApp
+      ? `It needs ShiftPane ${widget.needsApp} or later.`
+      : 'Every version of it was withdrawn.'
+  } else if (mine?.from === 'marketplace' && mine.version === widget.version) {
+    action = (
+      <Button icon="check" className="text-ok" disabled>
+        Installed
+      </Button>
+    )
+  } else {
+    action = (
+      <Button tone="primary" icon={mine ? 'refresh' : 'add'} onClick={() => onInstall(widget.id)}>
+        {mine ? `Update to ${widget.version}` : 'Install'}
+      </Button>
+    )
+  }
+  const asks = widget.permissions.filter((line) => line.asks)
+  return (
+    <WidgetTile
+      title={widget.name}
+      chip={`by ${widget.author}`}
+      widget={
+        builtInKind
+          ? { kind: builtInKind, tone: WIDGET_KINDS[builtInKind].tone }
+          : { kind: 'installed', widget: widget.id, tone: 'dark' }
+      }
+      wide={builtInKind ? WIDGET_KINDS[builtInKind].columns === 2 : wide}
+      description={widget.summary}
+      meta={`v${widget.version ?? widget.latest} · ${widget.categories.join(', ') || 'other'}`}
+      problem={note}
+      extra={
+        <p className="mt-1.5 text-ink-muted text-xs">
+          {widget.permissions.length === 0
+            ? 'Needs nothing from your PC.'
+            : widget.permissions.map((line) => line.text).join(' · ')}
+          {asks.length > 0 && <span className="text-warn"> · asks first</span>}
+        </p>
+      }
+      used={0}
+      justAdded={null}
+      data={data}
+      action={action ?? <span />}
+    />
   )
 }
