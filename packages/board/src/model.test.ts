@@ -9,6 +9,8 @@ import {
   moveTable,
   moveWidget,
   newId,
+  newInstalledWidget,
+  newWidgetId,
   parseBoard,
   pcWidgetsOn,
   placeTable,
@@ -19,6 +21,7 @@ import {
   setLook,
   setTableGrid,
   updateWidget,
+  widgetName,
 } from './model.ts'
 
 const tableIds = (board: Board) => board.tables.map((table) => table.id)
@@ -253,5 +256,58 @@ describe('newId and parseBoard', () => {
     expect(parseBoard({ grids: {}, gap: 12, radius: 28, theme: 'light', stacks: [] })).toEqual(
       DEFAULT_BOARD,
     )
+  })
+})
+
+describe('installed widgets', () => {
+  const gpuRing = { id: 'gpu-ring', name: 'GPU ring', sizes: ['small', 'medium'] } as const
+  const wideOnly = { id: 'wide-thing', name: 'Wide thing', sizes: ['medium'] } as const
+
+  it('start dark, one cell wide unless they have no small layout', () => {
+    expect(newInstalledWidget(gpuRing)).toEqual({
+      kind: 'installed',
+      widget: 'gpu-ring',
+      tone: 'dark',
+      columns: 1,
+    })
+    expect(newInstalledWidget(wideOnly).columns).toBe(2)
+  })
+
+  it('go on a table by their manifest id, with ids numbered after it', () => {
+    const { board, tableId } = addWidget(pair, 'table-1', newInstalledWidget(wideOnly))
+    // The pair's table is full, so the wide widget starts a table of its own.
+    expect(tableId).not.toBe('table-1')
+    const added = board.tables.find((table) => table.id === tableId)?.widgets[0]
+    expect(added).toEqual({
+      id: 'wide-thing-1',
+      kind: 'installed',
+      widget: 'wide-thing',
+      tone: 'dark',
+      columns: 2,
+      rows: 1,
+    })
+    expect(Board.safeParse(board).success).toBe(true)
+    expect(newWidgetId(board, newInstalledWidget(wideOnly))).toBe('wide-thing-2')
+  })
+
+  it('keep board ids within their length however long the manifest id', () => {
+    const long = { id: 'a'.repeat(64), name: 'Long', sizes: ['small'] } as const
+    const { board } = addWidget(DEFAULT_BOARD, 'table-1', newInstalledWidget(long))
+    expect(Board.safeParse(board).success).toBe(true)
+  })
+
+  it('are named as the PC says, or by id until it has', () => {
+    const { board } = addWidget(DEFAULT_BOARD, 'table-4', newInstalledWidget(gpuRing))
+    const item = board.tables.flatMap((table) => table.widgets).find((w) => w.kind === 'installed')
+    if (!item) throw new Error('not added')
+    expect(
+      widgetName(item, [{ ...gpuRing, sizes: ['small'], version: '1.0.0', actions: [], view: {} }]),
+    ).toBe('GPU ring')
+    expect(widgetName(item, [])).toBe('gpu-ring')
+  })
+
+  it('are subscribed to by their id', () => {
+    const { board } = addWidget(DEFAULT_BOARD, 'table-1', newInstalledWidget(gpuRing))
+    expect(pcWidgetsOn(board)).toEqual(['gpu-ring', 'pc-stats'])
   })
 })

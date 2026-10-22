@@ -1,4 +1,6 @@
 import {
+  type InstalledWidget,
+  InstalledWidgetData,
   MEDIA_WIDGET,
   MediaData,
   type MonitorInfo,
@@ -27,9 +29,20 @@ export interface PcData {
   media: { data: MediaData; at: number } | null
   /** The PC's real monitors, which the phone can duplicate. */
   monitors: MonitorInfo[]
+  /** The widgets installed on the PC, which a board can place besides the built-in ones. */
+  installed: InstalledWidget[]
+  /** The latest data of each installed widget some table shows, by widget id. */
+  widgets: Record<string, { data: InstalledWidgetData; at: number }>
 }
 
-const EMPTY: PcData = { pcStats: null, history: [], media: null, monitors: [] }
+const EMPTY: PcData = {
+  pcStats: null,
+  history: [],
+  media: null,
+  monitors: [],
+  installed: [],
+  widgets: {},
+}
 
 export function sampleOf(stats: PcStatsData): StatsSample {
   const { memory, network } = stats
@@ -63,6 +76,9 @@ export class PcDataStore {
       case 'monitors':
         this.#set({ ...this.#state, monitors: message.monitors })
         return
+      case 'widgets.installed':
+        this.#set({ ...this.#state, installed: message.widgets })
+        return
       case 'widget.update': {
         if (message.widgetId === PC_STATS_WIDGET) {
           const parsed = PcStatsData.safeParse(message.data)
@@ -76,6 +92,16 @@ export class PcDataStore {
           const parsed = MediaData.safeParse(message.data)
           if (parsed.success)
             this.#set({ ...this.#state, media: { data: parsed.data, at: message.at } })
+        } else {
+          const parsed = InstalledWidgetData.safeParse(message.data)
+          if (parsed.success)
+            this.#set({
+              ...this.#state,
+              widgets: {
+                ...this.#state.widgets,
+                [message.widgetId]: { data: parsed.data, at: message.at },
+              },
+            })
         }
         return
       }
@@ -84,9 +110,12 @@ export class PcDataStore {
     }
   }
 
-  /** The connection dropped: nothing shown so far is current any more. */
+  /**
+   * The connection dropped: nothing shown so far is current any more. What the installed
+   * widgets look like is kept, so they wait for the PC rather than show as missing.
+   */
   reset(): void {
-    this.#set(EMPTY)
+    this.#set({ ...EMPTY, installed: this.#state.installed })
   }
 
   #set(state: PcData): void {

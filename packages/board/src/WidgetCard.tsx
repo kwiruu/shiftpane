@@ -1,4 +1,5 @@
-import type { BoardWidget, MediaAction } from '@shiftpane/protocol'
+import type { MediaAction, Tone, WidgetKind } from '@shiftpane/protocol'
+import type { ActionName } from '@shiftpane/widget-sdk'
 import { Component, type ReactNode, useRef } from 'react'
 import { AnalogClockWidget } from './AnalogClock.tsx'
 import { CalendarWidget } from './Calendar.tsx'
@@ -6,8 +7,9 @@ import { ClockWidget } from './Clock.tsx'
 import type { PcData } from './data.ts'
 import { MediaWidget } from './Media.tsx'
 import { CpuWidget, MemoryWidget, NetworkWidget, PcStatsWidget } from './PcStats.tsx'
-import { fluid } from './parts.tsx'
-import { useElementSize } from './useElementSize.ts'
+import { fluid, Waiting } from './parts.tsx'
+import { type ElementSize, useElementSize } from './useElementSize.ts'
+import { sizeForBox, ViewWidget } from './ViewWidget.tsx'
 
 /** Keeps one broken widget from taking the whole board down with it. */
 class WidgetBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
@@ -31,8 +33,20 @@ class WidgetBoundary extends Component<{ children: ReactNode }, { failed: boolea
   }
 }
 
+/** What a card shows: a built-in widget by its kind, or an installed one by its id. */
+export type CardWidget =
+  | { kind: WidgetKind; tone: Tone }
+  | { kind: 'installed'; widget: string; tone: Tone }
+
+/** The media buttons a widget's view can press, as the phone sends them to the PC. */
+const MEDIA_BUTTONS: Partial<Record<ActionName, MediaAction>> = {
+  'media.play-pause': 'play-pause',
+  'media.next': 'next',
+  'media.previous': 'previous',
+}
+
 export interface WidgetCardProps {
-  widget: Pick<BoardWidget, 'kind' | 'tone'>
+  widget: CardWidget
   radius: number
   data: PcData
   connected: boolean
@@ -73,6 +87,16 @@ export function WidgetCard({ widget, radius, data, connected, onMediaAction }: W
         return <MemoryWidget {...stats} />
       case 'network':
         return <NetworkWidget {...stats} />
+      case 'installed':
+        return (
+          <InstalledCard
+            id={widget.widget}
+            box={box}
+            data={data}
+            connected={connected}
+            onMediaAction={onMediaAction}
+          />
+        )
     }
   }
 
@@ -89,6 +113,59 @@ export function WidgetCard({ widget, radius, data, connected, onMediaAction }: W
       >
         {box.width > 0 && box.height > 0 && <WidgetBoundary>{content()}</WidgetBoundary>}
       </div>
+    </div>
+  )
+}
+
+/** A widget installed on the PC, drawn from its view with its latest data. */
+function InstalledCard({
+  id,
+  box,
+  data,
+  connected,
+  onMediaAction,
+}: {
+  id: string
+  box: ElementSize
+  data: PcData
+  connected: boolean
+  onMediaAction: (action: MediaAction) => void
+}) {
+  const installed = data.installed.find((item) => item.id === id)
+  if (!installed) return <Waiting label={connected ? 'Not installed on this PC' : undefined} />
+  const latest = data.widgets[id]?.data
+  if (!latest) return <Waiting />
+  if (latest.output === null) {
+    return latest.problem ? <Problem text={latest.problem} /> : <Waiting />
+  }
+  const output = latest.output
+  return (
+    <ViewWidget
+      view={installed.view}
+      size={sizeForBox(box)}
+      context={{
+        sample:
+          output !== null && typeof output === 'object' && !Array.isArray(output) ? output : {},
+        sources: latest.sources,
+        config: latest.config,
+      }}
+      actions={installed.actions.filter((action) => MEDIA_BUTTONS[action])}
+      connected={connected}
+      onAction={(action) => {
+        const button = MEDIA_BUTTONS[action]
+        if (button) onMediaAction(button)
+      }}
+    />
+  )
+}
+
+/** An installed widget whose collector has nothing to show, and why. */
+function Problem({ text }: { text: string }) {
+  return (
+    <div className="grid h-full place-items-center text-center">
+      <p className="text-card-muted" style={{ fontSize: fluid(11, 6, 14) }}>
+        {text}
+      </p>
     </div>
   )
 }

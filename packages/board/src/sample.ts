@@ -1,4 +1,6 @@
 import {
+  type InstalledWidget,
+  type InstalledWidgetData,
   MEDIA_WIDGET,
   type MediaAction,
   type MediaData,
@@ -6,6 +8,7 @@ import {
   PC_STATS_WIDGET,
   type PcStatsData,
 } from '@shiftpane/protocol'
+import { pickSources, type SourceName, type Sources, sampleSources } from '@shiftpane/widget-sdk'
 import { HISTORY_LENGTH, PcDataStore } from './data.ts'
 
 /**
@@ -30,6 +33,16 @@ const MB = 1024 ** 2
 const wander = (value: number, step: number, min: number, max: number) =>
   Math.min(max, Math.max(min, value + (Math.random() - 0.5) * 2 * step))
 
+/**
+ * An installed widget as a preview shows it: its view, with its `sample.json` standing in for
+ * the collector's output, its config, and the sources it declared, read from the sample PC.
+ */
+export interface SampleInstalled extends InstalledWidget {
+  sample: Record<string, unknown>
+  config: Record<string, unknown>
+  sources: readonly SourceName[]
+}
+
 export class SampleFeed {
   readonly store = new PcDataStore()
   #track = 0
@@ -40,6 +53,7 @@ export class SampleFeed {
   #down = 2.4 * MB
   #up = 180 * 1024
   #timer: ReturnType<typeof setInterval> | undefined
+  #installed: SampleInstalled[] = []
 
   /** Starts the feed; calling it again does nothing. */
   start(): void {
@@ -50,7 +64,21 @@ export class SampleFeed {
     for (let i = HISTORY_LENGTH; i > 0; i -= 1)
       this.#update(PC_STATS_WIDGET, this.#stats(), now - i * 1000)
     this.#update(MEDIA_WIDGET, this.#media())
-    this.#timer = setInterval(() => this.#update(PC_STATS_WIDGET, this.#stats()), 1000)
+    this.#updateInstalled()
+    this.#timer = setInterval(() => {
+      this.#update(PC_STATS_WIDGET, this.#stats())
+      this.#updateInstalled()
+    }, 1000)
+  }
+
+  /** The installed widgets to preview, replacing any shown before. */
+  showInstalled(widgets: SampleInstalled[]): void {
+    this.#installed = widgets
+    this.store.handle({
+      type: 'widgets.installed',
+      widgets: widgets.map(({ sample: _, config: __, sources: ___, ...widget }) => widget),
+    })
+    this.#updateInstalled()
   }
 
   stop(): void {
@@ -64,10 +92,57 @@ export class SampleFeed {
     if (action === 'next') this.#track = (this.#track + 1) % TRACKS.length
     if (action === 'previous') this.#track = (this.#track + TRACKS.length - 1) % TRACKS.length
     this.#update(MEDIA_WIDGET, this.#media())
+    this.#updateInstalled()
   }
 
-  #update(widgetId: string, data: PcStatsData | MediaData, at = Date.now()) {
+  #update(widgetId: string, data: PcStatsData | MediaData | InstalledWidgetData, at = Date.now()) {
     this.store.handle({ type: 'widget.update', instanceId: widgetId, widgetId, data, at })
+  }
+
+  #updateInstalled(): void {
+    if (this.#installed.length === 0) return
+    const all = this.#sources()
+    for (const widget of this.#installed) {
+      this.#update(widget.id, {
+        sources: pickSources(all, widget.sources) as InstalledWidgetData['sources'],
+        output: widget.sample as InstalledWidgetData['output'],
+        config: widget.config as InstalledWidgetData['config'],
+        problem: null,
+      })
+    }
+  }
+
+  /** The sample PC, moving: its stats and track as the built-in widgets show them right now. */
+  #sources(): Sources {
+    const { history } = this.store.getState()
+    const track = TRACKS[this.#track] ?? TRACKS[0]
+    const total = 16 * GB
+    return {
+      ...sampleSources,
+      cpu: {
+        percent: this.#cpu,
+        cores: sampleSources.cpu.cores,
+        history: history.map((sample) => sample.cpu),
+      },
+      memory: {
+        percent: (this.#memory / total) * 100,
+        used: this.#memory,
+        total,
+        history: history.map((sample) => sample.memory),
+      },
+      gpu: { ...sampleSources.gpu, percent: this.#gpu, history: history.map((s) => s.gpu) },
+      network: {
+        receivedPerSecond: this.#down,
+        sentPerSecond: this.#up,
+        history: history.map((sample) => sample.down),
+      },
+      media: {
+        title: track?.title ?? null,
+        artist: track?.artist ?? null,
+        app: track?.app ?? null,
+        playing: this.#playing,
+      },
+    }
   }
 
   #stats(): PcStatsData {

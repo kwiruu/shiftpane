@@ -3,6 +3,7 @@ import { Icon } from '@shiftpane/ui/icons'
 import type { StatsSample } from './data.ts'
 import { bytesParts, rateParts } from './format.ts'
 import {
+  Bar,
   clampPercent,
   fluid,
   Glow,
@@ -181,27 +182,12 @@ export function MemoryWidget({ stats, box }: StatsProps) {
           / {total.value} {total.unit}
         </span>
       </div>
-      <div
-        className="flex overflow-hidden bg-card-soft"
-        style={{ height: fluid(12, roomy ? 11 : 9, 36), borderRadius: fluid(6, 3.5, 12) }}
-        aria-hidden
-      >
-        <div
-          className="h-full bg-flame transition-[width] duration-700 ease-out"
-          style={{
-            width: `${percent}%`,
-            backgroundImage:
-              'repeating-linear-gradient(-45deg, rgb(255 255 255 / 0.22) 0 3px, transparent 3px 8px)',
-          }}
-        />
-        <div
-          className="h-full flex-1"
-          style={{
-            backgroundImage:
-              'repeating-linear-gradient(-45deg, var(--card-line) 0 2px, transparent 2px 7px)',
-          }}
-        />
-      </div>
+      <Bar
+        percent={percent}
+        color="var(--color-flame)"
+        height={fluid(12, roomy ? 11 : 9, 36)}
+        radius={fluid(6, 3.5, 12)}
+      />
       {roomy && (
         <div className="flex gap-4" style={{ fontSize: fluid(11, 5.8, 14) }}>
           <span className="flex items-center gap-1.5">

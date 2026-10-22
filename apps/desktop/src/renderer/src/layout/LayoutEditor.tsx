@@ -277,6 +277,7 @@ export function LayoutEditor({ phones }: { phones: ConnectedPhone[] }) {
     <div className="grid h-full min-h-0 grid-cols-[19rem_minmax(0,1fr)_19rem] gap-4">
       <TablesPanel
         board={board}
+        installed={data.installed}
         current={current}
         aspect={(panel ?? area).width / (panel ?? area).height}
         selectedId={selected}
@@ -428,6 +429,7 @@ export function LayoutEditor({ phones }: { phones: ConnectedPhone[] }) {
         editor={
           <WidgetEditor
             board={board}
+            installed={data.installed}
             current={current}
             selectedId={selected}
             onChange={setBoard}

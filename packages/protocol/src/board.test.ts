@@ -1,6 +1,8 @@
+import { reservedIds } from '@shiftpane/widget-sdk'
 import { describe, expect, it } from 'vitest'
-import { Board, MAX_COLUMNS, MAX_CROP, MAX_TABLES, NO_INSETS } from './board.ts'
+import { Board, MAX_COLUMNS, MAX_CROP, MAX_TABLES, NO_INSETS, WidgetKind } from './board.ts'
 import { parsePcMessage, parsePhoneMessage } from './messages.ts'
+import { InstalledWidgetData } from './widgets.ts'
 
 const board = (): Board => ({
   gap: 12,
@@ -137,5 +139,104 @@ describe('board messages', () => {
     expect(parsePcMessage(JSON.stringify({ type: 'board', board: board() })).ok).toBe(true)
     expect(parsePcMessage(JSON.stringify({ type: 'board', board: null })).ok).toBe(true)
     expect(parsePhoneMessage(JSON.stringify({ type: 'board.save', board: null })).ok).toBe(false)
+  })
+})
+
+describe('installed widgets on a board', () => {
+  const installed = (widget: string) => ({
+    ...board(),
+    tables: [
+      {
+        id: 'table-1',
+        columns: 2,
+        rows: 1,
+        widgets: [
+          { id: 'gpu-ring-1', kind: 'installed', widget, tone: 'dark', columns: 1, rows: 1 },
+        ],
+      },
+    ],
+  })
+
+  it('places one by its manifest id', () => {
+    const parsed = Board.safeParse(installed('gpu-ring'))
+    expect(parsed.success).toBe(true)
+    expect(parsed.data?.tables[0]?.widgets[0]).toMatchObject({
+      kind: 'installed',
+      widget: 'gpu-ring',
+    })
+  })
+
+  it('needs an id that could be a manifest id', () => {
+    expect(Board.safeParse(installed('../gpu')).success).toBe(false)
+    expect(Board.safeParse(installed('GPU')).success).toBe(false)
+  })
+
+  it('needs the id for an installed widget, and takes none for a built-in one', () => {
+    const b = installed('gpu-ring')
+    const [table] = b.tables
+    if (!table) throw new Error('fixture')
+    const without = {
+      ...b,
+      tables: [{ ...table, widgets: [{ ...table.widgets[0], widget: undefined }] }],
+    }
+    expect(Board.safeParse(without).success).toBe(false)
+    const builtIn = Board.safeParse({
+      ...b,
+      tables: [{ ...table, widgets: [{ ...table.widgets[0], kind: 'cpu' }] }],
+    })
+    expect(builtIn.success && 'widget' in (builtIn.data.tables[0]?.widgets[0] ?? {})).toBe(false)
+  })
+
+  it('keeps every built-in kind out of the ids a package can take', () => {
+    for (const kind of WidgetKind.options) expect(reservedIds).toContain(kind)
+    expect(reservedIds).toContain('installed')
+  })
+})
+
+describe('widgets.installed', () => {
+  const gpuRing = {
+    id: 'gpu-ring',
+    name: 'GPU ring',
+    version: '1.1.0',
+    sizes: ['small'],
+    actions: [],
+    view: { small: { type: 'ring', bind: '@gpu/percent' } },
+  }
+
+  it('carries what a phone needs to draw each installed widget', () => {
+    const frame = JSON.stringify({ type: 'widgets.installed', widgets: [gpuRing] })
+    expect(parsePcMessage(frame).ok).toBe(true)
+  })
+
+  it('rejects a view the SDK would not accept', () => {
+    const bad = { ...gpuRing, view: { small: { type: 'iframe', src: 'https://example.com' } } }
+    expect(parsePcMessage(JSON.stringify({ type: 'widgets.installed', widgets: [bad] })).ok).toBe(
+      false,
+    )
+  })
+
+  it('is only ever sent by the PC', () => {
+    expect(parsePhoneMessage(JSON.stringify({ type: 'widgets.installed', widgets: [] })).ok).toBe(
+      false,
+    )
+  })
+
+  it('pairs with installed widget data in widget.update', () => {
+    expect(
+      InstalledWidgetData.safeParse({
+        sources: { gpu: { percent: 40, history: [1, 2] } },
+        output: { total: 3 },
+        config: { owner: 'kwiruu' },
+        problem: null,
+      }).success,
+    ).toBe(true)
+    expect(
+      InstalledWidgetData.safeParse({
+        sources: {},
+        output: null,
+        config: {},
+        problem: 'x'.repeat(300),
+      }).success,
+    ).toBe(false)
   })
 })

@@ -1,6 +1,6 @@
 import type { MediaAction, MediaData } from '@shiftpane/protocol'
 import { Icon } from '@shiftpane/ui/icons'
-import { fluid, Glow, Waiting } from './parts.tsx'
+import { Cover, Equalizer, fluid, Glow, Waiting } from './parts.tsx'
 import type { ElementSize } from './useElementSize.ts'
 
 interface MediaWidgetProps {
@@ -9,42 +9,6 @@ interface MediaWidgetProps {
   /** False while the phone cannot reach the PC: the buttons do nothing then. */
   connected: boolean
   onAction: (action: MediaAction) => void
-}
-
-/** Two hues picked from the title, so each track gets its own cover. */
-function hues(text: string): [number, number] {
-  let hash = 0
-  for (const char of text) hash = (hash * 31 + (char.codePointAt(0) ?? 0)) >>> 0
-  const first = hash % 360
-  return [first, (first + 40 + ((hash >> 9) % 80)) % 360]
-}
-
-/** The PC does not send cover art, so the cover is a gradient with a note on it. */
-function Cover({ title, size }: { title: string; size: string }) {
-  const [a, b] = hues(title)
-  return (
-    <div
-      className="grid shrink-0 place-items-center text-white/85 shadow-[inset_0_0_0_1px_rgb(255_255_255/0.12)]"
-      style={{
-        width: size,
-        height: size,
-        borderRadius: `calc(${size} * 0.24)`,
-        background: `linear-gradient(140deg, oklch(0.74 0.16 ${a}), oklch(0.5 0.19 ${b}))`,
-      }}
-    >
-      <Icon name="music" className="size-[42%]" />
-    </div>
-  )
-}
-
-function Equalizer() {
-  return (
-    <span className="equalizer inline-flex h-[0.9em] items-end gap-[2px]" aria-hidden>
-      <span className="h-full w-[3px] rounded-full bg-mint" />
-      <span className="h-full w-[3px] rounded-full bg-mint" />
-      <span className="h-full w-[3px] rounded-full bg-mint" />
-    </span>
-  )
 }
 
 /** What the PC is playing, with previous, play/pause and next. */

@@ -2,6 +2,7 @@ import {
   Board,
   type BoardWidget,
   type Insets,
+  type InstalledWidget,
   MAX_COLUMNS,
   MAX_CROP,
   MAX_GAP,
@@ -101,6 +102,41 @@ const widget = (id: string, kind: WidgetKind, tone: Tone, columns = 1, rows = 1)
   columns,
   rows,
 })
+
+/** A widget installed on the PC, about to be put on a table. */
+export interface NewInstalledWidget {
+  kind: 'installed'
+  /** Its manifest id. */
+  widget: string
+  tone: Tone
+  /** Columns it starts out spanning. */
+  columns: 1 | 2
+}
+
+/** What a new board widget is: a built-in kind, or a widget installed on the PC. */
+export type NewWidget = WidgetKind | NewInstalledWidget
+
+/**
+ * How an installed widget starts out on a table: dark, and two cells wide when it has no small
+ * layout to fit in one.
+ */
+export function newInstalledWidget(installed: {
+  id: string
+  sizes: readonly InstalledWidget['sizes'][number][]
+}): NewInstalledWidget {
+  return {
+    kind: 'installed',
+    widget: installed.id,
+    tone: 'dark',
+    columns: installed.sizes.includes('small') ? 1 : 2,
+  }
+}
+
+/** A board widget's name: its kind's, or the installed widget's own, or its id while the PC hasn't said. */
+export function widgetName(item: BoardWidget, installed: readonly InstalledWidget[]): string {
+  if (item.kind !== 'installed') return WIDGET_KINDS[item.kind].name
+  return installed.find((found) => found.id === item.widget)?.name ?? item.widget
+}
 
 export const DEFAULT_BOARD: Board = {
   gap: 12,
@@ -258,11 +294,14 @@ export function setCrop(board: Board, landscape: boolean, flipped: boolean, crop
   return { ...board, crop: { ...board.crop, [shape]: flipped ? turnRound(held) : held } }
 }
 
-/** The PC widgets the board needs data for, for `widgets.subscribe`. */
+/**
+ * The PC widgets the board needs data for, for `widgets.subscribe`: the built-in ones its
+ * widgets read, and every installed widget on it.
+ */
 export function pcWidgetsOn(board: Board): string[] {
   const ids = board.tables
     .flatMap((table) => table.widgets)
-    .map((item) => WIDGET_KINDS[item.kind].pcWidget)
+    .map((item) => (item.kind === 'installed' ? item.widget : WIDGET_KINDS[item.kind].pcWidget))
     .filter((id): id is string => id !== null)
   return [...new Set(ids)].sort()
 }
@@ -325,20 +364,32 @@ export function setTableGrid(
 // widgets
 // ---------------------------------------------------------------------------------------
 
+/** The id the next widget of this kind gets: `cpu-2`, or `gpu-ring-1` for an installed one. */
+export function newWidgetId(board: Board, what: NewWidget): string {
+  // Leave room for the number: board ids are at most 64 characters.
+  return newId(board, typeof what === 'string' ? what : what.widget.slice(0, 56))
+}
+
 /**
- * Adds a widget of `kind` to a table, at the kind's usual width (narrowed to the table). When it
- * does not fit there any more, it starts a new table right after; `tableId` says where it went.
+ * Adds a widget to a table, at its usual width (narrowed to the table): a built-in kind, or a
+ * widget installed on the PC. When it does not fit there any more, it starts a new table right
+ * after; `tableId` says where it went.
  */
 export function addWidget(
   board: Board,
   tableId: string,
-  kind: WidgetKind,
+  what: NewWidget,
 ): { board: Board; tableId: string } {
   const index = board.tables.findIndex((table) => table.id === tableId)
   const table = board.tables[index]
   if (!table) return { board, tableId }
-  const info = WIDGET_KINDS[kind]
-  const item = widget(newId(board, kind), kind, info.tone, Math.min(info.columns, table.columns))
+  const info = typeof what === 'string' ? WIDGET_KINDS[what] : what
+  const id = newWidgetId(board, what)
+  const columns = Math.min(info.columns, table.columns)
+  const item: BoardWidget =
+    typeof what === 'string'
+      ? widget(id, what, info.tone, columns)
+      : { id, kind: 'installed', widget: what.widget, tone: what.tone, columns, rows: 1 }
   const candidate = { ...table, widgets: [...table.widgets, item] }
   if (table.widgets.length < MAX_TABLE_WIDGETS && placeTable(candidate).overflow.length === 0) {
     return { board: mapTable(board, tableId, () => candidate), tableId }

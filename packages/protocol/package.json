@@ -12,6 +12,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@shiftpane/widget-sdk": "workspace:*",
     "zod": "catalog:"
   },
   "devDependencies": {

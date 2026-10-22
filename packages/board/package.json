@@ -16,7 +16,8 @@
   "dependencies": {
     "@shiftpane/layout": "workspace:*",
     "@shiftpane/protocol": "workspace:*",
-    "@shiftpane/ui": "workspace:*"
+    "@shiftpane/ui": "workspace:*",
+    "@shiftpane/widget-sdk": "workspace:*"
   },
   "peerDependencies": {
     "react": "catalog:",

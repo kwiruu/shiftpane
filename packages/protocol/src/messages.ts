@@ -9,7 +9,7 @@
 import { z } from 'zod'
 import { Board } from './board.ts'
 import { PhoneAuth, SavedPairing } from './pairing.ts'
-import { MediaAction, WidgetId } from './widgets.ts'
+import { InstalledWidget, MediaAction, WidgetId } from './widgets.ts'
 
 /** 2: `hello` carries `auth` (token, code or saved key) instead of only a token. */
 export const PROTOCOL_VERSION = 2
@@ -262,6 +262,17 @@ export const WidgetUpdateMessage = z.object({
 })
 
 /**
+ * The widgets installed on the PC, which a board can place besides the built-in ones: what each
+ * is called and its view. Sent after `welcome` and again whenever one is installed, updated or
+ * removed; each message replaces the whole list. A phone that predates this message drops it as
+ * unknown and shows those widgets as missing, which is why it did not bump `PROTOCOL_VERSION`.
+ */
+export const InstalledWidgetsMessage = z.object({
+  type: z.literal('widgets.installed'),
+  widgets: z.array(InstalledWidget).max(64),
+})
+
+/**
  * The widget board to show. Sent after `welcome`, then whenever the board changes on another
  * phone or in the desktop editor. Null after `welcome` when the PC has no board yet: the phone
  * then sends its own with `board.save`.
@@ -321,6 +332,7 @@ export const PcMessage = z.discriminatedUnion('type', [
   StreamReadyMessage,
   MonitorsMessage,
   WidgetUpdateMessage,
+  InstalledWidgetsMessage,
   BoardMessage,
   SplitSetMessage,
   SourceSetMessage,

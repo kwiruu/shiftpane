@@ -54,6 +54,14 @@ const ICONS = {
   previous: 'skip-previous-bold',
   music: 'music-notes-bold-duotone',
   bolt: 'bolt-bold-duotone',
+  // Icons a widget's view.json can name (`widgetIcons` in @shiftpane/widget-sdk)
+  activity: 'pulse-2-bold-duotone',
+  coffee: 'cup-hot-bold-duotone',
+  cpu: 'cpu-bold-duotone',
+  gauge: 'speedometer-middle-bold-duotone',
+  memory: 'ssd-round-bold-duotone',
+  star: 'star-bold-duotone',
+  thermometer: 'thermometer-bold-duotone',
 } as const
 
 interface IconSet {

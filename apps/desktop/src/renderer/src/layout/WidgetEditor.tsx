@@ -1,5 +1,5 @@
-import { removeWidget, updateWidget, WIDGET_KINDS } from '@shiftpane/board'
-import type { Board, Tone } from '@shiftpane/protocol'
+import { removeWidget, updateWidget, widgetName } from '@shiftpane/board'
+import type { Board, InstalledWidget, Tone } from '@shiftpane/protocol'
 import { Button } from '../shell/parts.tsx'
 import { Row, Section, Segmented, Stepper } from './controls.tsx'
 
@@ -14,12 +14,15 @@ const TONES = [
  */
 export function WidgetEditor({
   board,
+  installed,
   current,
   selectedId,
   onChange,
   onSelect,
 }: {
   board: Board
+  /** The widgets installed on the PC, for their names. */
+  installed: InstalledWidget[]
   /** The table being edited, by position. */
   current: number
   selectedId: string | null
@@ -32,7 +35,7 @@ export function WidgetEditor({
 
   return (
     <Section
-      title={WIDGET_KINDS[widget.kind].name}
+      title={widgetName(widget, installed)}
       action={
         <button
           type="button"

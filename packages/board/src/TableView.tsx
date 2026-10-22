@@ -2,7 +2,7 @@ import type { MediaAction, Table } from '@shiftpane/protocol'
 import { Icon } from '@shiftpane/ui/icons'
 import { type PointerEvent, useRef, useState } from 'react'
 import type { PcData } from './data.ts'
-import { placeTable, WIDGET_KINDS } from './model.ts'
+import { placeTable, widgetName } from './model.ts'
 import { WidgetCard } from './WidgetCard.tsx'
 
 /**
@@ -127,7 +127,7 @@ export function TableView(props: TableViewProps) {
               key={widget.id}
               data-table-id={table.id}
               data-widget-index={table.widgets.indexOf(widget)}
-              title={editing ? WIDGET_KINDS[widget.kind].name : undefined}
+              title={editing ? widgetName(widget, data.installed) : undefined}
               style={{
                 gridColumn: `${column + 1} / span ${columns}`,
                 gridRow: `${row + 1} / span ${rows}`,

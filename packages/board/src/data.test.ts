@@ -62,6 +62,71 @@ describe('PcDataStore', () => {
     store.handle({ type: 'monitors', monitors })
     expect(store.getState().monitors).toEqual(monitors)
     store.reset()
-    expect(store.getState()).toEqual({ pcStats: null, history: [], media: null, monitors: [] })
+    expect(store.getState()).toEqual({
+      pcStats: null,
+      history: [],
+      media: null,
+      monitors: [],
+      installed: [],
+      widgets: {},
+    })
+  })
+})
+
+describe('installed widgets', () => {
+  const gpuRing = {
+    id: 'gpu-ring',
+    name: 'GPU ring',
+    version: '1.1.0',
+    sizes: ['small' as const],
+    actions: [],
+    view: { small: { type: 'ring' as const, bind: '@gpu/percent' } },
+  }
+  const data = {
+    sources: { gpu: { percent: 40, history: [] } },
+    output: {},
+    config: {},
+    problem: null,
+  }
+
+  it("keeps what the PC has installed and each one's latest data", () => {
+    const store = new PcDataStore()
+    store.handle({ type: 'widgets.installed', widgets: [gpuRing] })
+    store.handle({
+      type: 'widget.update',
+      instanceId: 'gpu-ring',
+      widgetId: 'gpu-ring',
+      data,
+      at: 9,
+    })
+    expect(store.getState().installed).toEqual([gpuRing])
+    expect(store.getState().widgets['gpu-ring']).toEqual({ data, at: 9 })
+  })
+
+  it("drops data that is not shaped like an installed widget's", () => {
+    const store = new PcDataStore()
+    store.handle({
+      type: 'widget.update',
+      instanceId: 'gpu-ring',
+      widgetId: 'gpu-ring',
+      data: { percent: 40 },
+      at: 1,
+    })
+    expect(store.getState().widgets).toEqual({})
+  })
+
+  it('forgets the data but not the widgets when the connection drops', () => {
+    const store = new PcDataStore()
+    store.handle({ type: 'widgets.installed', widgets: [gpuRing] })
+    store.handle({
+      type: 'widget.update',
+      instanceId: 'gpu-ring',
+      widgetId: 'gpu-ring',
+      data,
+      at: 9,
+    })
+    store.reset()
+    expect(store.getState().installed).toEqual([gpuRing])
+    expect(store.getState().widgets).toEqual({})
   })
 })

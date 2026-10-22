@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import { SOLAR } from './solar.tsx'
 
 /**
@@ -6,9 +7,17 @@ import { SOLAR } from './solar.tsx'
  */
 export type IconName = keyof typeof SOLAR
 
-export function Icon({ name, className = 'size-5' }: { name: IconName; className?: string }) {
+export function Icon({
+  name,
+  className = 'size-5',
+  style,
+}: {
+  name: IconName
+  className?: string
+  style?: CSSProperties
+}) {
   return (
-    <svg viewBox="0 0 24 24" className={`shrink-0 ${className}`} aria-hidden>
+    <svg viewBox="0 0 24 24" className={`shrink-0 ${className}`} style={style} aria-hidden>
       {SOLAR[name]}
     </svg>
   )

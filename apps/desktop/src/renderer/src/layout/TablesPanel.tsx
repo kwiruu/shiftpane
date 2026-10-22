@@ -4,9 +4,15 @@ import {
   moveTable,
   removeTable,
   setLook,
-  WIDGET_KINDS,
+  widgetName,
 } from '@shiftpane/board'
-import { type Board, MAX_GAP, MAX_RADIUS, MAX_TABLES } from '@shiftpane/protocol'
+import {
+  type Board,
+  type InstalledWidget,
+  MAX_GAP,
+  MAX_RADIUS,
+  MAX_TABLES,
+} from '@shiftpane/protocol'
 import { Icon } from '@shiftpane/ui/icons'
 import { type KeyboardEvent, type PointerEvent, useRef, useState } from 'react'
 import { Card, Chip } from '../shell/parts.tsx'
@@ -31,6 +37,7 @@ export interface SendTarget {
  */
 export function TablesPanel({
   board,
+  installed,
   current,
   aspect,
   selectedId,
@@ -40,6 +47,8 @@ export function TablesPanel({
   onChange,
 }: {
   board: Board
+  /** The widgets installed on the PC, for their names. */
+  installed: InstalledWidget[]
   /** The table being edited, by position. */
   current: number
   /** Width over height of the widget area, for the thumbnails. */
@@ -126,7 +135,7 @@ export function TablesPanel({
           <ol className="flex flex-col gap-1">
             {board.tables.map((table, index) => {
               const selected = index === current
-              const names = table.widgets.map((widget) => WIDGET_KINDS[widget.kind].name)
+              const names = table.widgets.map((widget) => widgetName(widget, installed))
               const receiving = sendTo?.index === index
               const refusing = receiving && !sendTo.fits
               const note = refusing ? 'No room for it here' : names.join(', ') || 'Empty'
@@ -201,6 +210,7 @@ export function TablesPanel({
 
         <Inspector
           board={board}
+          installed={installed}
           current={current}
           selectedId={selectedId}
           onChange={onChange}

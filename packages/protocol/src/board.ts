@@ -7,6 +7,7 @@
  */
 
 import { z } from 'zod'
+import { WidgetId } from './widgets.ts'
 
 export const MAX_TABLES = 12
 export const MAX_COLUMNS = 6
@@ -41,15 +42,25 @@ const BoardId = z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/)
 const Columns = z.number().int().min(1).max(MAX_COLUMNS)
 const Rows = z.number().int().min(1).max(MAX_ROWS)
 
-export const BoardWidget = z.object({
+const Placement = {
   id: BoardId,
-  kind: WidgetKind,
   tone: Tone,
   /** Cells the widget spans; narrowed to its table's grid when that has fewer. */
   columns: Columns,
   rows: Rows,
-})
+}
+
+/**
+ * A widget on a table: a built-in one by its kind, or one installed on the PC (from the
+ * marketplace or a folder) by its manifest id. The PC sends phones the installed widgets' views
+ * (`widgets.installed`); an installed widget the PC no longer has shows as missing.
+ */
+export const BoardWidget = z.discriminatedUnion('kind', [
+  z.object({ ...Placement, kind: WidgetKind }),
+  z.object({ ...Placement, kind: z.literal('installed'), widget: WidgetId }),
+])
 export type BoardWidget = z.infer<typeof BoardWidget>
+export type InstalledBoardWidget = Extract<BoardWidget, { kind: 'installed' }>
 
 export const Table = z.object({
   id: BoardId,

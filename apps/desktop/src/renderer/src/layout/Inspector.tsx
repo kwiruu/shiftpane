@@ -1,5 +1,5 @@
-import { placeTable, setTableGrid, WIDGET_KINDS } from '@shiftpane/board'
-import { type Board, MAX_COLUMNS, MAX_ROWS } from '@shiftpane/protocol'
+import { placeTable, setTableGrid, widgetName } from '@shiftpane/board'
+import { type Board, type InstalledWidget, MAX_COLUMNS, MAX_ROWS } from '@shiftpane/protocol'
 import { Section, Stepper } from './controls.tsx'
 
 /**
@@ -9,12 +9,15 @@ import { Section, Stepper } from './controls.tsx'
  */
 export function Inspector({
   board,
+  installed,
   current,
   selectedId,
   onChange,
   onSelect,
 }: {
   board: Board
+  /** The widgets installed on the PC, for their names. */
+  installed: InstalledWidget[]
   /** The table being edited, by position. */
   current: number
   selectedId: string | null
@@ -57,7 +60,7 @@ export function Inspector({
                   item.id === selectedId ? 'lifted text-ink' : 'raised text-ink-soft'
                 }`}
               >
-                {WIDGET_KINDS[item.kind].name}
+                {widgetName(item, installed)}
               </button>
             ))}
           </div>

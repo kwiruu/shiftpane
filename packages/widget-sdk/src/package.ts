@@ -36,6 +36,22 @@ export const packageLimits = {
   manifestBytes: 16 * 1024,
 }
 
+/**
+ * Ids of the widgets built into ShiftPane. A package can't take one: phones ask the PC for a
+ * widget's data by its id, so a package called `pc-stats` would get the built-in one's.
+ */
+export const reservedIds: readonly string[] = [
+  'analog-clock',
+  'calendar',
+  'clock',
+  'cpu',
+  'installed',
+  'media',
+  'memory',
+  'network',
+  'pc-stats',
+]
+
 export interface WidgetPackage {
   manifest: Manifest
   view: WidgetView
