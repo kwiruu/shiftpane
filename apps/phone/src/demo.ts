@@ -57,6 +57,15 @@ export function useBoard(): Board {
 
 export function sendToPc(message: PhoneMessage): boolean {
   if (message.type === 'media.control') feed.press(message.action)
+  // An installed widget's media buttons work in the demo too; audio has nothing to change here.
+  if (message.type === 'widget.action') {
+    const media = {
+      'media.play-pause': 'play-pause',
+      'media.next': 'next',
+      'media.previous': 'previous',
+    } as const
+    if (message.action in media) feed.press(media[message.action as keyof typeof media])
+  }
   return true
 }
 

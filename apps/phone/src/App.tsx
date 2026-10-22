@@ -122,6 +122,7 @@ export function App() {
             data={pcData}
             connected={connected}
             onMediaAction={(action) => sendToPc({ type: 'media.control', action })}
+            onWidgetAction={(action) => sendToPc({ type: 'widget.action', ...action })}
           />
         )}
       </section>

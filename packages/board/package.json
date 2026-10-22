@@ -7,6 +7,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./model": "./src/model.ts",
+    "./format": "./src/format.ts",
     "./board.css": "./src/board.css"
   },
   "scripts": {

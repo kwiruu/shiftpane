@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { PcMessage } from '@shiftpane/protocol'
 import type { RunInput, RunResult } from '@shiftpane/widget-runtime'
+import type { ActionName } from '@shiftpane/widget-sdk'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { PhoneInfo } from '../server/phone-hub.ts'
 import { fileStorage } from '../storage.ts'
@@ -90,7 +91,11 @@ async function folder(name: string, widget: Fixture | typeof stars, extra: objec
 }
 
 function setup(
-  options: { run?: (input: RunInput) => Promise<RunResult>; now?: () => number } = {},
+  options: {
+    run?: (input: RunInput) => Promise<RunResult>
+    now?: () => number
+    press?: (action: ActionName, value?: number) => Promise<void>
+  } = {},
 ) {
   const sent: Array<{ id: string; message: PcMessage }> = []
   const listeners = new Map<string, (phones: PhoneInfo[]) => void>()
@@ -122,6 +127,7 @@ function setup(
     appVersion: '0.5.0',
     run,
     now: options.now,
+    press: options.press,
   })
   const connect = (...ids: string[]) => {
     phones = ids.map(phone)
@@ -351,5 +357,32 @@ describe('refreshSeconds', () => {
     expect(refreshSeconds(entry(1, ['api.github.com']) as never)).toBe(30)
     expect(refreshSeconds(entry(5, []) as never)).toBe(5)
     expect(refreshSeconds(entry(undefined, []) as never)).toBe(60)
+  })
+})
+
+describe('buttons', () => {
+  it('press only an action the widget declares, and a volume only with a value', async () => {
+    const press = vi.fn(async (_action: ActionName, _value?: number) => {})
+    const t = setup({ press })
+    await t.widgets.start()
+    const pressed = vi.fn()
+    t.widgets.on('pressed', pressed)
+    await install(
+      t,
+      await folder('knob', gpuRing, {
+        id: 'volume-knob',
+        permissions: { sources: ['gpu'], actions: ['audio.toggle-mute', 'audio.set-volume'] },
+      }),
+    )
+    expect(await t.widgets.press('volume-knob', 'audio.toggle-mute')).toBe(true)
+    expect(await t.widgets.press('volume-knob', 'media.next')).toBe(false)
+    expect(await t.widgets.press('volume-knob', 'audio.set-volume')).toBe(false)
+    expect(await t.widgets.press('volume-knob', 'audio.set-volume', 30)).toBe(true)
+    expect(await t.widgets.press('not-installed', 'audio.toggle-mute')).toBe(false)
+    expect(press.mock.calls).toEqual([
+      ['audio.toggle-mute', undefined],
+      ['audio.set-volume', 30],
+    ])
+    expect(pressed).toHaveBeenCalledWith('volume-knob')
   })
 })

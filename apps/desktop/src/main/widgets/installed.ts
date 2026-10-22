@@ -1,8 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import { EventEmitter } from 'node:events'
-import type { InstalledWidget, InstalledWidgetData, PcMessage } from '@shiftpane/protocol'
+import type {
+  InstalledWidget,
+  InstalledWidgetData,
+  PcMessage,
+  PhoneMessage,
+} from '@shiftpane/protocol'
 import { type HostFetch, type RunResult, runCollector } from '@shiftpane/widget-runtime'
 import {
+  type ActionName,
   addedPermissions,
   canSendOffPc,
   compareVersions,
@@ -51,6 +57,8 @@ export interface InstalledWidgetsOptions {
   appVersion: string
   run?: typeof runCollector
   fetchFor?: (permissions: Permissions) => HostFetch
+  /** Presses a button on the PC: a media key, or the volume. */
+  press?: (action: ActionName, value?: number) => Promise<void>
   now?: () => number
   log?: (message: string) => void
 }
@@ -73,7 +81,12 @@ export function refreshSeconds(entry: Pick<InstalledEntry, 'widget'>): number {
  * `installed` fires when the list or a widget's config changes (phones and collectors follow it),
  * `status` when a collector run finished.
  */
-export class InstalledWidgets extends EventEmitter<{ installed: []; status: [] }> {
+export class InstalledWidgets extends EventEmitter<{
+  installed: []
+  status: []
+  /** A button on this widget was pressed; what it shows may have changed. */
+  pressed: [string]
+}> {
   readonly #options: InstalledWidgetsOptions
   readonly #log: (message: string) => void
   readonly #runs = new Map<string, RunState>()
@@ -90,8 +103,17 @@ export class InstalledWidgets extends EventEmitter<{ installed: []; status: [] }
     this.#log = options.log ?? (() => {})
     const { hub } = options
     const onChange = (phones: PhoneInfo[]) => this.#greet(phones)
+    const onMessage = (_phone: PhoneInfo, message: PhoneMessage) => {
+      if (message.type === 'widget.action') {
+        void this.press(message.widget, message.action, message.value)
+      }
+    }
     hub.on('change', onChange)
-    this.#unhook.push(() => hub.off('change', onChange))
+    hub.on('message', onMessage)
+    this.#unhook.push(
+      () => hub.off('change', onChange),
+      () => hub.off('message', onMessage),
+    )
   }
 
   /** Reads what is installed. Phones that connect before it has finished get the list after. */
@@ -406,6 +428,25 @@ export class InstalledWidgets extends EventEmitter<{ installed: []; status: [] }
     if (run) run.lastRunAt = null
     this.emit('status')
     return null
+  }
+
+  /**
+   * A button on an installed widget, pressed on a phone. Only an action the widget's manifest
+   * declares is pressed, and a volume only with a value. Returns whether it was pressed.
+   */
+  async press(id: string, action: ActionName, value?: number): Promise<boolean> {
+    const entry = this.#options.store.get(id)
+    const press = this.#options.press
+    if (!press || !entry?.widget.manifest.permissions.actions.includes(action)) return false
+    if (action === 'audio.set-volume' && value === undefined) return false
+    try {
+      await press(action, value)
+    } catch (error) {
+      this.#log(`${id}: ${action} failed: ${(error as Error).message}`)
+      return false
+    }
+    this.emit('pressed', id)
+    return true
   }
 
   /** Where an installed widget was loaded from, for reloading it. */

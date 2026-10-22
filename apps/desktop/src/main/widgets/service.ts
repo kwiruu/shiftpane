@@ -72,6 +72,11 @@ export class WidgetService {
     )
   }
 
+  /** Collects a widget again soon, after a button changed what it shows. */
+  refresh(id: string, delayMs = this.#options.mediaRefreshDelayMs ?? 250): void {
+    setTimeout(() => void this.#run(id, true), delayMs)
+  }
+
   stop(): void {
     this.#stopped = true
     for (const running of this.#running.values()) clearInterval(running.timer)

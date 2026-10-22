@@ -1,5 +1,4 @@
-import type { MediaAction, Tone, WidgetKind } from '@shiftpane/protocol'
-import type { ActionName } from '@shiftpane/widget-sdk'
+import type { MediaAction, Tone, WidgetAction, WidgetKind } from '@shiftpane/protocol'
 import { Component, type ReactNode, useRef } from 'react'
 import { AnalogClockWidget } from './AnalogClock.tsx'
 import { CalendarWidget } from './Calendar.tsx'
@@ -38,26 +37,28 @@ export type CardWidget =
   | { kind: WidgetKind; tone: Tone }
   | { kind: 'installed'; widget: string; tone: Tone }
 
-/** The media buttons a widget's view can press, as the phone sends them to the PC. */
-const MEDIA_BUTTONS: Partial<Record<ActionName, MediaAction>> = {
-  'media.play-pause': 'play-pause',
-  'media.next': 'next',
-  'media.previous': 'previous',
-}
-
 export interface WidgetCardProps {
   widget: CardWidget
   radius: number
   data: PcData
   connected: boolean
   onMediaAction: (action: MediaAction) => void
+  /** A button on an installed widget. Without it, those buttons do nothing (a preview). */
+  onWidgetAction?: (action: WidgetAction) => void
 }
 
 /**
  * One widget on its card. The card is a size container: widgets measure it to pick a layout
  * and size their type in `cqmin`, so the same widget works as a small tile or a whole screen.
  */
-export function WidgetCard({ widget, radius, data, connected, onMediaAction }: WidgetCardProps) {
+export function WidgetCard({
+  widget,
+  radius,
+  data,
+  connected,
+  onMediaAction,
+  onWidgetAction,
+}: WidgetCardProps) {
   const ref = useRef<HTMLDivElement>(null)
   const box = useElementSize(ref)
   const stats = { stats: data.pcStats?.data ?? null, recent: data.history, box }
@@ -94,7 +95,7 @@ export function WidgetCard({ widget, radius, data, connected, onMediaAction }: W
             box={box}
             data={data}
             connected={connected}
-            onMediaAction={onMediaAction}
+            onAction={onWidgetAction}
           />
         )
     }
@@ -123,13 +124,13 @@ function InstalledCard({
   box,
   data,
   connected,
-  onMediaAction,
+  onAction,
 }: {
   id: string
   box: ElementSize
   data: PcData
   connected: boolean
-  onMediaAction: (action: MediaAction) => void
+  onAction?: (action: WidgetAction) => void
 }) {
   const installed = data.installed.find((item) => item.id === id)
   if (!installed) return <Waiting label={connected ? 'Not installed on this PC' : undefined} />
@@ -149,12 +150,9 @@ function InstalledCard({
         sources: latest.sources,
         config: latest.config,
       }}
-      actions={installed.actions.filter((action) => MEDIA_BUTTONS[action])}
+      actions={installed.actions}
       connected={connected}
-      onAction={(action) => {
-        const button = MEDIA_BUTTONS[action]
-        if (button) onMediaAction(button)
-      }}
+      onAction={onAction && ((action) => onAction({ widget: id, action }))}
     />
   )
 }

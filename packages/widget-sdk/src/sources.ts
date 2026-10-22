@@ -149,14 +149,30 @@ export const sourceSchemas = {
     history: History,
   }),
   disks: z.object({
-    drives: z.array(z.object({ name: Text, used: Bytes, total: Bytes })).max(32),
+    drives: z
+      .array(
+        z.object({
+          name: Text,
+          used: Bytes,
+          total: Bytes,
+          percent: Percent,
+          readPerSecond: Bytes.nullable().optional(),
+          writePerSecond: Bytes.nullable().optional(),
+        }),
+      )
+      .max(32),
   }),
+  /** All null on a PC without a battery. */
   battery: z.object({
     percent: Percent.nullable(),
     charging: z.boolean().nullable(),
     minutesLeft: z.number().nonnegative().nullable(),
   }),
-  audio: z.object({ volume: Percent.nullable(), muted: z.boolean().nullable(), device: Text }),
+  audio: z.object({
+    volume: Percent.nullable(),
+    muted: z.boolean().nullable(),
+    device: Text.nullable(),
+  }),
   system: z.object({ uptimeSeconds: z.number().nonnegative(), os: Text }),
   temperatures: z.object({
     cpu: z.number().nullable(),
@@ -172,8 +188,19 @@ export const sourceSchemas = {
     position: z.number().nonnegative().nullable().optional(),
     duration: z.number().nonnegative().nullable().optional(),
   }),
+  /** Shaped for a `list` node: the program, its memory, its CPU share; the numbers for collectors. */
   processes: z.object({
-    top: z.array(z.object({ title: Text, value: Text })).max(20),
+    top: z
+      .array(
+        z.object({
+          title: Text,
+          subtitle: Text.optional(),
+          value: Text,
+          cpuPercent: Percent.optional(),
+          memoryBytes: Bytes.nullable().optional(),
+        }),
+      )
+      .max(20),
   }),
   'active-window': z.object({ app: Text.nullable(), title: Text.nullable() }),
 } satisfies Record<SourceName, z.ZodType>
@@ -228,7 +255,18 @@ export const sampleSources: SourceData = {
     sentPerSecond: 310 * 1024,
     history: minute(30, 22, 11),
   },
-  disks: { drives: [{ name: 'C:', used: 612 * 1024 ** 3, total: 1000 * 1024 ** 3 }] },
+  disks: {
+    drives: [
+      {
+        name: 'C:',
+        used: 612 * 1024 ** 3,
+        total: 1000 * 1024 ** 3,
+        percent: 61,
+        readPerSecond: 3.1 * 1024 ** 2,
+        writePerSecond: 820 * 1024,
+      },
+    ],
+  },
   battery: { percent: 82, charging: false, minutesLeft: 214 },
   audio: { volume: 45, muted: false, device: 'Speakers' },
   system: { uptimeSeconds: 3 * 86_400 + 4 * 3600, os: 'Windows 11' },
@@ -243,9 +281,27 @@ export const sampleSources: SourceData = {
   },
   processes: {
     top: [
-      { title: 'Code', value: '12%' },
-      { title: 'Chrome', value: '9%' },
-      { title: 'Discord', value: '3%' },
+      {
+        title: 'Code',
+        subtitle: '1.2 GB',
+        value: '12%',
+        cpuPercent: 12,
+        memoryBytes: 1.2 * 1024 ** 3,
+      },
+      {
+        title: 'chrome',
+        subtitle: '2.4 GB',
+        value: '9%',
+        cpuPercent: 9,
+        memoryBytes: 2.4 * 1024 ** 3,
+      },
+      {
+        title: 'Discord',
+        subtitle: '410 MB',
+        value: '3%',
+        cpuPercent: 3,
+        memoryBytes: 410 * 1024 ** 2,
+      },
     ],
   },
   'active-window': { app: 'Code', title: 'widget.ts — shiftpane' },

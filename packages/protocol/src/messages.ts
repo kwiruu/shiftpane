@@ -6,6 +6,7 @@
  * to the matching union; `type` is the discriminator.
  */
 
+import { actionNames } from '@shiftpane/widget-sdk'
 import { z } from 'zod'
 import { Board } from './board.ts'
 import { PhoneAuth, SavedPairing } from './pairing.ts'
@@ -95,6 +96,19 @@ export const MediaControlMessage = z.object({
   type: z.literal('media.control'),
   action: MediaAction,
 })
+
+/**
+ * A button on an installed widget. The PC presses it only when that widget's manifest declares
+ * the action, which the user agreed to when installing it. `value` is the volume for
+ * `audio.set-volume`, 0-100.
+ */
+export const WidgetActionMessage = z.object({
+  type: z.literal('widget.action'),
+  widget: WidgetId,
+  action: z.enum(actionNames),
+  value: z.number().min(0).max(100).optional(),
+})
+export type WidgetAction = Omit<z.infer<typeof WidgetActionMessage>, 'type'>
 
 const Inset = z.number().min(0).max(512)
 
@@ -190,6 +204,7 @@ export const PhoneMessage = z.discriminatedUnion('type', [
   StreamStopMessage,
   WidgetsSubscribeMessage,
   MediaControlMessage,
+  WidgetActionMessage,
   ScreenMessage,
   BoardSaveMessage,
   PhoneRtcSignalMessage,

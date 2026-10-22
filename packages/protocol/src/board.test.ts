@@ -240,3 +240,26 @@ describe('widgets.installed', () => {
     ).toBe(false)
   })
 })
+
+describe('widget.action', () => {
+  const action = (change: object) =>
+    parsePhoneMessage(
+      JSON.stringify({
+        type: 'widget.action',
+        widget: 'volume-knob',
+        action: 'audio.toggle-mute',
+        ...change,
+      }),
+    ).ok
+
+  it('presses one of the fixed actions for an installed widget', () => {
+    expect(action({})).toBe(true)
+    expect(action({ action: 'audio.set-volume', value: 40 })).toBe(true)
+  })
+
+  it('takes no other action, no volume out of range and no odd widget id', () => {
+    expect(action({ action: 'shell.run' })).toBe(false)
+    expect(action({ action: 'audio.set-volume', value: 140 })).toBe(false)
+    expect(action({ widget: '../x' })).toBe(false)
+  })
+})

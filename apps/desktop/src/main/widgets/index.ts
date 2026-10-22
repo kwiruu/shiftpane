@@ -1,5 +1,7 @@
 import { join } from 'node:path'
+import type { MediaAction } from '@shiftpane/helper-client'
 import { MEDIA_WIDGET, PC_STATS_WIDGET } from '@shiftpane/protocol'
+import type { ActionName } from '@shiftpane/widget-sdk'
 import type { PhoneHub } from '../server/phone-hub.ts'
 import { fileStorage } from '../storage.ts'
 import {
@@ -50,6 +52,27 @@ export function startWidgets(options: WidgetsOptions): Widgets {
     log,
   })
   const sources = new SourceReader({ helper: options.helper, log })
+  /** The buttons installed widgets may press, each one fixed call to the helper. */
+  const press = async (action: ActionName, value?: number) => {
+    const helper = await options.helper()
+    switch (action) {
+      case 'media.play-pause':
+      case 'media.next':
+      case 'media.previous':
+        await helper.call('media.control', { action: action.slice('media.'.length) as MediaAction })
+        sources.forget('media')
+        return
+      case 'audio.toggle-mute':
+        await helper.call('audio.control', { action: 'toggle-mute' })
+        sources.forget('audio')
+        return
+      case 'audio.set-volume':
+        if (value === undefined) return
+        await helper.call('audio.control', { action: 'set-volume', percent: value })
+        sources.forget('audio')
+        return
+    }
+  }
   const installed = new InstalledWidgets({
     store: new InstalledStore(join(options.dataDir, 'widgets'), log),
     secrets: new WidgetSecrets(
@@ -59,8 +82,10 @@ export function startWidgets(options: WidgetsOptions): Widgets {
     sources,
     hub: options.hub,
     appVersion: options.appVersion,
+    press,
     log,
   })
+  installed.on('pressed', (id) => service.refresh(id))
   // The built-in ids are reserved, so an installed widget never replaces one.
   installed.on('installed', () => service.setCollectors({ ...installed.collectors(), ...builtIn }))
   void installed.start()

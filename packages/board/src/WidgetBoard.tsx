@@ -1,4 +1,4 @@
-import type { Board, MediaAction } from '@shiftpane/protocol'
+import type { Board, MediaAction, WidgetAction } from '@shiftpane/protocol'
 import { useEffect, useRef, useState } from 'react'
 import type { PcData } from './data.ts'
 import { TableView } from './TableView.tsx'
@@ -8,6 +8,8 @@ export interface WidgetBoardProps {
   data: PcData
   connected: boolean
   onMediaAction: (action: MediaAction) => void
+  /** A button on an installed widget, for the PC to press if the widget may. */
+  onWidgetAction?: (action: WidgetAction) => void
 }
 
 /** How long the table dots stay after the board stops scrolling. */
@@ -19,7 +21,13 @@ const DOTS_MS = 1200
  * it. Each table keeps the board's spacing on every side and nothing more: space for a notch or
  * camera is the board's crop, set by hand in the editor.
  */
-export function WidgetBoard({ board, data, connected, onMediaAction }: WidgetBoardProps) {
+export function WidgetBoard({
+  board,
+  data,
+  connected,
+  onMediaAction,
+  onWidgetAction,
+}: WidgetBoardProps) {
   const pager = useRef<HTMLDivElement>(null)
   const [current, setCurrent] = useState(0)
   const [moving, setMoving] = useState(false)
@@ -68,6 +76,7 @@ export function WidgetBoard({ board, data, connected, onMediaAction }: WidgetBoa
                 data={data}
                 connected={connected}
                 onMediaAction={onMediaAction}
+                onWidgetAction={onWidgetAction}
               />
             )}
           </section>

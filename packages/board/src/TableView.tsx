@@ -1,4 +1,4 @@
-import type { MediaAction, Table } from '@shiftpane/protocol'
+import type { MediaAction, Table, WidgetAction } from '@shiftpane/protocol'
 import { Icon } from '@shiftpane/ui/icons'
 import { type PointerEvent, useRef, useState } from 'react'
 import type { PcData } from './data.ts'
@@ -47,6 +47,7 @@ export interface TableViewProps {
   data: PcData
   connected: boolean
   onMediaAction: (action: MediaAction) => void
+  onWidgetAction?: (action: WidgetAction) => void
   editing?: TableEditing
 }
 
@@ -59,7 +60,7 @@ const DRAG_SLOP = 6
  * spot on the table, and empty cells offer to add one.
  */
 export function TableView(props: TableViewProps) {
-  const { table, gap, radius, data, connected, onMediaAction, editing } = props
+  const { table, gap, radius, data, connected, onMediaAction, onWidgetAction, editing } = props
   const { placed, free } = placeTable(table)
   const dropAt = editing?.dropAt ?? null
   // Anywhere but onto a widget, the new one flows into the first cell with room for it.
@@ -150,6 +151,7 @@ export function TableView(props: TableViewProps) {
                   data={data}
                   connected={connected}
                   onMediaAction={onMediaAction}
+                  onWidgetAction={onWidgetAction}
                 />
               </div>
             </div>
