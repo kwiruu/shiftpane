@@ -1,6 +1,6 @@
 /*
  * The widget board's look: soft light and dark cards on black, big numbers with
- * small units, and a few loud accents. Apple devices keep their own system font; everything
+ * small units, black-and-white highlights and a few loud accents. Apple devices keep their own system font; everything
  * else gets Inter, which is close to it and comes with @shiftpane/ui's theme.
  *
  * Import after the theme:
@@ -30,8 +30,17 @@
   --color-card-line: var(--card-line);
   --color-card-soft: var(--card-soft);
   --color-card-pill: var(--card-pill);
+  --color-card-accent: var(--card-accent);
+  --color-card-accent-ink: var(--card-accent-ink);
+  --color-card-dim: var(--card-dim);
+  --color-card-edge: var(--card-edge);
 }
 
+/*
+ * `accent` is the one highlight a card uses (today's date, a gauge's arc, the newest bar), with
+ * `accent-ink` for text on it; it is the card's own ink, so the cards stay black and white.
+ * `dim` is older history, `edge` the hairline round a card.
+ */
 .tone-light {
   --card: oklch(1 0 0);
   --card-ink: oklch(0.18 0.004 286);
@@ -39,6 +48,10 @@
   --card-line: oklch(0.92 0.003 286);
   --card-soft: oklch(0.955 0.002 286);
   --card-pill: oklch(1 0 0);
+  --card-accent: oklch(0.18 0.004 286);
+  --card-accent-ink: oklch(1 0 0);
+  --card-dim: oklch(0.18 0.004 286 / 0.2);
+  --card-edge: oklch(0 0 0 / 0.05);
   color-scheme: light;
 }
 
@@ -50,6 +63,10 @@
   --card-line: oklch(0.3 0.005 286);
   --card-soft: oklch(0.26 0.005 286);
   --card-pill: oklch(0.4 0.006 286);
+  --card-accent: oklch(0.97 0.002 286);
+  --card-accent-ink: oklch(0.19 0.004 286);
+  --card-dim: oklch(0.97 0.002 286 / 0.22);
+  --card-edge: oklch(1 0 0 / 0.06);
   color-scheme: dark;
 }
 

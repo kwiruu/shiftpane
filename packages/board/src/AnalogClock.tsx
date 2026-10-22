@@ -70,13 +70,13 @@ function Face({ now }: { now: Date }) {
           y1="124"
           x2="100"
           y2="20"
-          stroke="var(--color-flame)"
+          stroke="var(--card-muted)"
           strokeWidth="1.8"
           strokeLinecap="round"
         />
       </g>
       <circle cx="100" cy="100" r="5.5" fill="var(--card-ink)" />
-      <circle cx="100" cy="100" r="3" fill="var(--color-flame)" />
+      <circle cx="100" cy="100" r="2.5" fill="var(--card)" />
     </svg>
   )
 }

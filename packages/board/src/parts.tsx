@@ -53,12 +53,14 @@ export function Value({
 }) {
   return (
     <p
-      className={`whitespace-nowrap font-semibold leading-none tracking-tight tabular-nums ${className}`}
+      className={`whitespace-nowrap font-normal leading-none tracking-tight tabular-nums ${className}`}
       style={{ fontSize: size }}
     >
       {value}
       {unit && (
-        <span className="ml-[0.06em] font-medium text-[0.45em] tracking-normal">{unit}</span>
+        <span className="ml-[0.08em] font-normal text-[0.45em] text-card-muted tracking-normal">
+          {unit}
+        </span>
       )}
     </p>
   )
@@ -69,7 +71,7 @@ export function Ring({
   percent,
   size,
   thickness = 9,
-  color = 'var(--color-flame)',
+  color = 'var(--card-accent)',
   children,
 }: {
   percent: number
@@ -91,7 +93,7 @@ export function Ring({
           cy="50"
           r={r}
           fill="none"
-          stroke="var(--card-line)"
+          stroke="var(--card-soft)"
           strokeWidth={thickness}
         />
         <circle
@@ -126,7 +128,7 @@ export function Meter({ percent, segments = 5 }: { percent: number; segments?: n
             style={{ borderRadius: fluid(6, 4, 14) }}
           >
             <div
-              className="absolute inset-x-0 bottom-0 bg-flame transition-[height] duration-700 ease-out"
+              className="absolute inset-x-0 bottom-0 bg-card-accent transition-[height] duration-700 ease-out"
               style={{ height: `${fill * 100}%`, borderRadius: fluid(6, 4, 14) }}
             />
           </div>
@@ -136,7 +138,7 @@ export function Meter({ percent, segments = 5 }: { percent: number; segments?: n
   )
 }
 
-/** Recent values as thin vertical bars, newest on the right in the accent colour. */
+/** Recent values as thin vertical bars, newest on the right in the highlight. */
 export function HistoryBars({ values, max = 100 }: { values: (number | null)[]; max?: number }) {
   return (
     <div className="flex h-full w-full items-center" style={{ gap: fluid(2, 1.1, 4) }} aria-hidden>
@@ -146,7 +148,7 @@ export function HistoryBars({ values, max = 100 }: { values: (number | null)[]; 
         return (
           <span
             key={i}
-            className={`min-w-px flex-1 rounded-full ${last ? 'bg-flame' : 'bg-card-ink/25'}`}
+            className={`min-w-px flex-1 rounded-full ${last ? 'bg-card-accent' : 'bg-card-dim'}`}
             style={{ height: `${height}%` }}
           />
         )
@@ -201,10 +203,10 @@ export function Sparkline({ series }: { series: { values: (number | null)[]; col
   )
 }
 
-/** A soft coloured light behind a dark card's content. */
+/** A soft light behind a dark card's content, as if the card were lit from one corner. */
 export function Glow({
   style,
-  color = 'var(--color-flame)',
+  color = 'var(--card-ink)',
 }: {
   style: CSSProperties
   color?: string
@@ -212,7 +214,7 @@ export function Glow({
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute size-[75%] rounded-full opacity-30 blur-3xl"
+      className="pointer-events-none absolute size-[75%] rounded-full opacity-[0.07] blur-3xl"
       style={{ background: color, ...style }}
     />
   )

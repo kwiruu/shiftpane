@@ -7,10 +7,13 @@ function DayTrack({ progress }: { progress: number }) {
   const at = `${progress * 100}%`
   return (
     <div className="relative h-[3px] rounded-full bg-card-line" aria-hidden>
-      <span className="absolute top-1/2 left-0 size-[7px] -translate-y-1/2 rounded-full bg-flame" />
-      <span className="absolute inset-y-0 left-0 rounded-full bg-flame" style={{ width: at }} />
+      <span className="absolute top-1/2 left-0 size-[7px] -translate-y-1/2 rounded-full bg-card-accent" />
       <span
-        className="absolute top-1/2 size-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[2.5px] border-card bg-flame"
+        className="absolute inset-y-0 left-0 rounded-full bg-card-accent"
+        style={{ width: at }}
+      />
+      <span
+        className="absolute top-1/2 size-[11px] -translate-x-1/2 -translate-y-1/2 rounded-full border-[2.5px] border-card bg-card-accent"
         style={{ left: at }}
       />
     </div>
@@ -29,7 +32,7 @@ export function ClockWidget({ box }: { box: ElementSize }) {
     return (
       <div className="flex h-full flex-col justify-center">
         <p
-          className="font-semibold tabular-nums leading-none tracking-tight"
+          className="font-normal tabular-nums leading-none tracking-tight"
           style={{ fontSize: fluid(22, 30, 56) }}
         >
           {time}
@@ -63,14 +66,14 @@ export function ClockWidget({ box }: { box: ElementSize }) {
         )}
         <div className="mt-[1.5cqmin] flex items-end justify-between gap-2">
           <p
-            className="font-semibold tabular-nums leading-[0.85] tracking-tight"
+            className="font-normal tabular-nums leading-[0.85] tracking-tight"
             style={{ fontSize: fluid(28, box.width > box.height * 1.6 ? 34 : 24, 104) }}
           >
             {time}
           </p>
           {box.width >= 150 && (
             <span
-              className="mb-[0.15em] rounded-full bg-flame px-[0.6em] py-[0.2em] font-semibold text-white tabular-nums"
+              className="mb-[0.15em] rounded-full bg-card-soft px-[0.6em] py-[0.2em] font-medium text-card-muted tabular-nums shadow-[inset_0_0_0_1px_var(--card-line)]"
               style={{ fontSize: fluid(10, 5.5, 15) }}
             >
               :{seconds}

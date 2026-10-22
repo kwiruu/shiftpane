@@ -79,7 +79,7 @@ export function WidgetCard({ widget, radius, data, connected, onMediaAction }: W
   // The padding sits inside the container so its `cqmin` refers to this card, not the page.
   return (
     <div
-      className={`tone-${widget.tone} relative size-full overflow-hidden bg-card text-card-ink`}
+      className={`tone-${widget.tone} relative size-full overflow-hidden bg-card text-card-ink shadow-[inset_0_0_0_1px_var(--card-edge)]`}
       style={{ borderRadius: radius, containerType: 'size' }}
     >
       <div

@@ -20,7 +20,7 @@ export function CalendarWidget({ box }: { box: ElementSize }) {
       <div className="flex h-full items-center justify-between" style={{ gap: fluid(12, 8, 32) }}>
         <div className="flex shrink-0 items-center" style={{ gap: fluid(8, 5, 16) }}>
           <p
-            className="font-semibold text-flame tabular-nums leading-none tracking-tight"
+            className="font-normal tabular-nums leading-none tracking-tight"
             style={{ fontSize: fluid(36, 38, 92) }}
           >
             {today}
@@ -39,7 +39,7 @@ export function CalendarWidget({ box }: { box: ElementSize }) {
               <div key={day.toISOString()} className="grid justify-items-center gap-[2cqmin]">
                 <span
                   className={`grid aspect-square w-[min(100%,2.6em)] place-items-center rounded-full font-medium tabular-nums ${
-                    isToday ? 'bg-flame/15 text-flame' : ''
+                    isToday ? 'bg-card-accent text-card-accent-ink' : ''
                   }`}
                   style={{ fontSize: fluid(12, 8, 18) }}
                 >
@@ -61,14 +61,14 @@ export function CalendarWidget({ box }: { box: ElementSize }) {
     return (
       <div className="flex h-full flex-col justify-between">
         <p
-          className="font-semibold text-flame uppercase tracking-wide"
+          className="font-medium text-card-muted uppercase tracking-wide"
           style={{ fontSize: fluid(10, 8, 15) }}
         >
           {weekday}
         </p>
         <div>
           <p
-            className="font-semibold tabular-nums leading-[0.9] tracking-tight"
+            className="font-normal tabular-nums leading-[0.9] tracking-tight"
             style={{ fontSize: fluid(34, 40, 96) }}
           >
             {today}
@@ -92,7 +92,7 @@ export function CalendarWidget({ box }: { box: ElementSize }) {
         <p className="font-semibold" style={{ fontSize: fluid(14, 8.5, 22) }}>
           {month}
         </p>
-        <p className="font-semibold text-flame" style={{ fontSize: fluid(11, 6.5, 16) }}>
+        <p className="font-medium text-card-muted" style={{ fontSize: fluid(11, 6.5, 16) }}>
           {weekday}
         </p>
       </div>
@@ -118,7 +118,7 @@ export function CalendarWidget({ box }: { box: ElementSize }) {
                 <span
                   className={`grid aspect-square h-[92%] max-h-[2.4em] place-items-center rounded-full font-medium tabular-nums ${
                     day === today
-                      ? 'bg-flame text-white'
+                      ? 'bg-card-accent text-card-accent-ink'
                       : weekend(column)
                         ? 'text-card-muted'
                         : day < today
