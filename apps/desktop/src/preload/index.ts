@@ -4,7 +4,15 @@ import type { CaptureEvent } from '../shared/capture.ts'
 import type { DisplayState } from '../shared/display.ts'
 import type { FirewallAllowResult, FirewallState } from '../shared/firewall.ts'
 import { IpcChannel, type PairingState } from '../shared/pairing.ts'
-import type { AppSettings, FolderCheck, InstalledInfo, InstallResult } from '../shared/widgets.ts'
+import type {
+  AccountState,
+  AppSettings,
+  FolderCheck,
+  InstalledInfo,
+  InstallResult,
+  ShareResult,
+  StoreList,
+} from '../shared/widgets.ts'
 import type { ShiftPaneApi } from './api.ts'
 
 const platform: ShiftPaneApi['platform'] =
@@ -81,6 +89,30 @@ const api: ShiftPaneApi = {
       ipcRenderer.invoke(IpcChannel.widgetsSetConfig, id, values) as Promise<string[]>,
     setSecret: (id, name, value) =>
       ipcRenderer.invoke(IpcChannel.widgetsSetSecret, id, name, value) as Promise<string | null>,
+    share: (id, notes) =>
+      ipcRenderer.invoke(IpcChannel.widgetsShare, id, notes) as Promise<ShareResult>,
+  },
+  store: {
+    list: (refresh) =>
+      ipcRenderer.invoke(IpcChannel.storeList, refresh === true) as Promise<StoreList>,
+    check: (id) => ipcRenderer.invoke(IpcChannel.storeCheck, id) as Promise<FolderCheck>,
+    onOpen: (listener) => {
+      const handler = (_event: IpcRendererEvent, id: string) => listener(id)
+      ipcRenderer.on(IpcChannel.storeOpen, handler)
+      return () => ipcRenderer.off(IpcChannel.storeOpen, handler)
+    },
+    takeOpen: () => ipcRenderer.invoke(IpcChannel.storeTakeOpen) as Promise<string | null>,
+  },
+  account: {
+    get: () => ipcRenderer.invoke(IpcChannel.accountGet) as Promise<AccountState>,
+    onChange: (listener) => {
+      const handler = (_event: IpcRendererEvent, state: AccountState) => listener(state)
+      ipcRenderer.on(IpcChannel.accountChanged, handler)
+      return () => ipcRenderer.off(IpcChannel.accountChanged, handler)
+    },
+    signIn: () => ipcRenderer.invoke(IpcChannel.accountSignIn) as Promise<AccountState>,
+    cancel: () => ipcRenderer.invoke(IpcChannel.accountCancel) as Promise<void>,
+    signOut: () => ipcRenderer.invoke(IpcChannel.accountSignOut) as Promise<void>,
   },
   settings: {
     get: () => ipcRenderer.invoke(IpcChannel.settingsGet) as Promise<AppSettings>,

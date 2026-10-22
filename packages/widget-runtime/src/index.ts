@@ -1,3 +1,4 @@
+export { checkFolder, type FolderReport, type PackResult, packFolder } from './check.ts'
 export {
   checkUrl,
   type GuardOptions,
@@ -19,4 +20,5 @@ export {
   type RunResult,
   runCollector,
 } from './run.ts'
+export { verifySignature } from './signature.ts'
 export { type OpenedPackage, openPackage, packageTexts, packPackage, sha256 } from './zip.ts'

@@ -3,7 +3,15 @@ import type { CaptureEvent } from '../shared/capture.ts'
 import type { DisplayState } from '../shared/display.ts'
 import type { FirewallAllowResult, FirewallState, SettingsPage } from '../shared/firewall.ts'
 import type { PairingState } from '../shared/pairing.ts'
-import type { AppSettings, FolderCheck, InstalledInfo, InstallResult } from '../shared/widgets.ts'
+import type {
+  AccountState,
+  AppSettings,
+  FolderCheck,
+  InstalledInfo,
+  InstallResult,
+  ShareResult,
+  StoreList,
+} from '../shared/widgets.ts'
 
 /** The only surface the renderer gets: exposed as `window.shiftpane` by the preload script. */
 export interface ShiftPaneApi {
@@ -75,6 +83,27 @@ export interface ShiftPaneApi {
     setConfig(id: string, values: Record<string, unknown>): Promise<string[]>
     /** Sets one of a widget's secrets, or clears it with null; resolves with why it couldn't. */
     setSecret(id: string, name: string, value: string | null): Promise<string | null>
+    /** Packs a widget loaded from a folder and uploads it to the marketplace for review. */
+    share(id: string, notes?: string): Promise<ShareResult>
+  }
+  /** The marketplace: what it offers, checked against its signed index. */
+  store: {
+    /** Everything it offers; `refresh` asks again instead of using the last answer. */
+    list(refresh?: boolean): Promise<StoreList>
+    /** Gets a widget's newest version this app can run and checks it, for the install prompt. */
+    check(id: string): Promise<FolderCheck>
+    /** An install link was opened (`shiftpane://install/<id>`); returns an unsubscribe function. */
+    onOpen(listener: (id: string) => void): () => void
+    /** The install link the app was started with, once. */
+    takeOpen(): Promise<string | null>
+  }
+  /** Signing in to the marketplace to share widgets, with a code typed on github.com. */
+  account: {
+    get(): Promise<AccountState>
+    onChange(listener: (state: AccountState) => void): () => void
+    signIn(): Promise<AccountState>
+    cancel(): Promise<void>
+    signOut(): Promise<void>
   }
   settings: {
     get(): Promise<AppSettings>

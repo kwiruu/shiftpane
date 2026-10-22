@@ -24,6 +24,7 @@ import {
   type Permissions,
   readPackage,
   reservedIds,
+  type WidgetPackage,
 } from '@shiftpane/widget-sdk'
 import type { FolderCheck, InstalledInfo, InstallResult } from '../../shared/widgets.ts'
 import type { PhoneHub, PhoneInfo } from '../server/phone-hub.ts'
@@ -47,10 +48,18 @@ interface RunState {
 }
 
 interface Pending {
-  widget: ReturnType<typeof readPackage> & { ok: true }
+  widget: WidgetPackage
   texts: PackageTexts
   origin: Origin
   expires: number
+}
+
+/** What the marketplace says about an installed widget. */
+export interface StoreNote {
+  /** Why this version was withdrawn; it no longer runs. */
+  revoked?: string
+  /** A newer version this app can run. */
+  update?: string
 }
 
 export interface InstalledWidgetsOptions {
@@ -99,6 +108,7 @@ export class InstalledWidgets extends EventEmitter<{
   readonly #collectors = new Map<string, { entry: InstalledEntry; collector: WidgetCollector }>()
   readonly #greeted = new Set<string>()
   readonly #unhook: Array<() => void> = []
+  #notes = new Map<string, StoreNote>()
   #queue: Promise<unknown> = Promise.resolve()
   #started: Promise<void> | null = null
 
@@ -231,6 +241,16 @@ export class InstalledWidgets extends EventEmitter<{
     const data = (output: Record<string, JsonValue> | null, problem: string | null) =>
       ({ sources, output, config, problem }) as InstalledWidgetData
 
+    const revoked = this.#notes.get(entry.id)?.revoked
+    if (revoked !== undefined) {
+      return {
+        sources: {},
+        output: null,
+        config,
+        problem: `Withdrawn from the marketplace: ${revoked}`.slice(0, 256),
+      } as InstalledWidgetData
+    }
+
     if (collector === undefined) return data({}, null)
 
     const missing = manifest.config.find(
@@ -318,6 +338,8 @@ export class InstalledWidgets extends EventEmitter<{
         secrets: manifest.permissions.secrets.map((name) => ({ name, set: set.has(name) })),
         secretsAvailable: secrets.available,
         origin: entry.origin,
+        revoked: this.#notes.get(entry.id)?.revoked ?? null,
+        update: this.#notes.get(entry.id)?.update ?? null,
         installedAt: entry.installedAt,
         updatedAt: entry.updatedAt,
         status: { lastRunAt: run?.lastRunAt ?? null, problem: run?.problem ?? null },
@@ -331,7 +353,16 @@ export class InstalledWidgets extends EventEmitter<{
     if (problems.length > 0) return { status: 'invalid', folder, problems }
     const read = readPackage(files)
     if (!read.ok) return { status: 'invalid', folder, problems: read.problems }
-    const { manifest, collector } = read.widget
+    return this.offer(read.widget, files, { kind: 'folder', path: folder }, folder)
+  }
+
+  /**
+   * Holds a checked package for `install` once the user has seen what it may do, unless this app
+   * can't take it. `location` is where it comes from, to show.
+   */
+  offer(widget: WidgetPackage, files: PackageTexts, origin: Origin, location: string): FolderCheck {
+    const folder = location
+    const { manifest, collector } = widget
     const refused: string[] = []
     if (reservedIds.includes(manifest.id)) {
       refused.push(`"${manifest.id}" is a widget built into ShiftPane. Give yours another id.`)
@@ -348,15 +379,11 @@ export class InstalledWidgets extends EventEmitter<{
       if (pending.expires < now) this.#pending.delete(token)
     }
     const token = randomUUID()
-    this.#pending.set(token, {
-      widget: read,
-      texts: files,
-      origin: { kind: 'folder', path: folder },
-      expires: now + PENDING_MS,
-    })
+    this.#pending.set(token, { widget, texts: files, origin, expires: now + PENDING_MS })
     const before = this.#options.store.get(manifest.id)
     return {
       status: 'ready',
+      from: origin.kind,
       token,
       folder,
       widget: {
@@ -383,14 +410,10 @@ export class InstalledWidgets extends EventEmitter<{
     const pending = this.#pending.get(token)
     this.#pending.delete(token)
     if (!pending || pending.expires < this.#now()) {
-      return { ok: false, problem: 'That check has expired. Load the folder again.' }
+      return { ok: false, problem: 'That check has expired. Try again.' }
     }
     try {
-      const entry = await this.#options.store.put(
-        pending.widget.widget,
-        pending.texts,
-        pending.origin,
-      )
+      const entry = await this.#options.store.put(pending.widget, pending.texts, pending.origin)
       this.#runs.delete(entry.id)
       this.#changed()
       return { ok: true, id: entry.id }
@@ -454,8 +477,23 @@ export class InstalledWidgets extends EventEmitter<{
     return true
   }
 
-  /** Where an installed widget was loaded from, for reloading it. */
+  /** Where an installed widget came from: its folder, or the marketplace version. */
   origin(id: string): Origin | undefined {
     return this.#options.store.get(id)?.origin
+  }
+
+  /** Every installed widget's id, version and origin, for the marketplace to compare. */
+  entries(): { id: string; version: string; origin: Origin }[] {
+    return this.#options.store.list().map((entry) => ({
+      id: entry.id,
+      version: entry.widget.manifest.version,
+      origin: entry.origin,
+    }))
+  }
+
+  /** What the marketplace says about each installed widget: revoked versions, updates. */
+  setStoreNotes(notes: Map<string, StoreNote>): void {
+    this.#notes = notes
+    this.emit('status')
   }
 }

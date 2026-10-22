@@ -1,21 +1,15 @@
 import { readdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
-  inspectCollector,
-  openPackage,
-  PACKAGE_FILES,
-  type PackageFile,
-  type PackageTexts,
-  packPackage,
-  readWidgetFolder,
-} from '@shiftpane/widget-runtime'
-import {
   canSendOffPc,
   osiLicenses,
   readPackage,
   reservedIds,
   type WidgetPackage,
 } from '@shiftpane/widget-sdk'
+import { PACKAGE_FILES, type PackageFile, type PackageTexts, readWidgetFolder } from './folder.ts'
+import { inspectCollector } from './run.ts'
+import { openPackage, packPackage } from './zip.ts'
 
 export interface FolderReport {
   /** The package, when its files parse and its view fits its manifest. */

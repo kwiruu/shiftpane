@@ -30,6 +30,7 @@ import {
 } from './display/index.ts'
 import { FirewallMonitor } from './firewall/monitor.ts'
 import { allowThroughFirewall, queryFirewall } from './firewall/powershell.ts'
+import { installLinkId, installLinkIn, PROTOCOL } from './links.ts'
 import { PairingService } from './pairing.ts'
 import { SettingsService } from './settings.ts'
 import { fileStorage } from './storage.ts'
@@ -44,6 +45,12 @@ const platform =
 if (!app.requestSingleInstanceLock()) {
   app.quit()
 }
+
+// Install links from the site (shiftpane://install/<id>). Only the installed app claims the
+// scheme; a development build leaves it to whatever is installed.
+if (app.isPackaged) app.setAsDefaultProtocolClient(PROTOCOL)
+/** An install link that arrived before the window could take it. */
+let pendingInstall: string | null = installLinkIn(process.argv)
 
 // WebRTC hides this PC's LAN addresses behind random `.local` names, which the phone could only
 // resolve over multicast DNS, and the firewall rule this app adds lets in TCP only. A phone is
@@ -242,6 +249,24 @@ function registerBoardIpc(service: BoardService): void {
   })
 }
 
+/** Shows an install link's widget in the window, or keeps it until the window asks. */
+function openInstallLink(id: string): void {
+  if (mainWindow && !mainWindow.webContents.isLoading()) {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+    mainWindow.webContents.send(IpcChannel.storeOpen, id)
+  } else {
+    pendingInstall = id
+  }
+}
+
+// macOS hands links over as an event, even before the app is ready.
+app.on('open-url', (event, url) => {
+  event.preventDefault()
+  const id = installLinkId(url)
+  if (id) openInstallLink(id)
+})
+
 const WidgetId = z
   .string()
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/)
@@ -257,8 +282,50 @@ const NOT_DEVELOPER: FolderCheck = {
  * from the window: the main process asks for the folder itself, and a reload uses the folder the
  * widget was loaded from.
  */
-function registerWidgetIpc(installed: Widgets['installed'], appSettings: SettingsService): void {
+function registerWidgetIpc(widgetsService: Widgets, appSettings: SettingsService): void {
+  const { installed, marketplace, account, folders } = widgetsService
   const developer = async () => (await appSettings.get()).developerMode
+  // Folder widgets reload on save while Developer mode is on.
+  void appSettings.get().then((value) => folders.setEnabled(value.developerMode))
+  appSettings.on('change', (value) => folders.setEnabled(value.developerMode))
+
+  ipcMain.handle(IpcChannel.storeList, (event, refresh: unknown) =>
+    fromMainWindow(event) ? marketplace.list(refresh === true) : { ok: false, problem: '' },
+  )
+  ipcMain.handle(
+    IpcChannel.storeCheck,
+    (event, id: unknown): Promise<FolderCheck> | FolderCheck => {
+      const parsed = WidgetId.safeParse(id)
+      if (!fromMainWindow(event) || !parsed.success) return { status: 'canceled' }
+      return marketplace.check(parsed.data)
+    },
+  )
+  ipcMain.handle(IpcChannel.storeTakeOpen, (event) => {
+    if (!fromMainWindow(event)) return null
+    const id = pendingInstall
+    pendingInstall = null
+    return id
+  })
+  ipcMain.handle(IpcChannel.accountGet, (event) => (fromMainWindow(event) ? account.state : null))
+  ipcMain.handle(IpcChannel.accountSignIn, (event) =>
+    fromMainWindow(event) ? account.signIn() : account.state,
+  )
+  ipcMain.handle(IpcChannel.accountCancel, (event) => {
+    if (fromMainWindow(event)) account.cancel()
+  })
+  ipcMain.handle(IpcChannel.accountSignOut, async (event) => {
+    if (fromMainWindow(event)) await account.signOut()
+  })
+  account.on('change', (state) => mainWindow?.webContents.send(IpcChannel.accountChanged, state))
+  ipcMain.handle(IpcChannel.widgetsShare, async (event, id: unknown, notes: unknown) => {
+    const parsed = WidgetId.safeParse(id)
+    if (!fromMainWindow(event) || !parsed.success)
+      return { ok: false, problems: ['Nothing to share.'] }
+    if (!(await developer())) {
+      return { ok: false, problems: ['Turn on Developer mode in Settings to share widgets.'] }
+    }
+    return widgetsService.share(parsed.data, typeof notes === 'string' ? notes.slice(0, 500) : '')
+  })
   ipcMain.handle(IpcChannel.settingsGet, (event) =>
     fromMainWindow(event) ? appSettings.get() : null,
   )
@@ -288,7 +355,7 @@ function registerWidgetIpc(installed: Widgets['installed'], appSettings: Setting
     if (!fromMainWindow(event) || !parsed.success) return { status: 'canceled' }
     if (!(await developer())) return NOT_DEVELOPER
     const origin = installed.origin(parsed.data)
-    if (!origin) return { status: 'canceled' }
+    if (origin?.kind !== 'folder') return { status: 'canceled' }
     return installed.check(origin.path)
   })
   ipcMain.handle(IpcChannel.widgetsInstall, (event, token: unknown) => {
@@ -372,8 +439,11 @@ ipcMain.on(IpcChannel.appVersion, (event) => {
   event.returnValue = app.getVersion()
 })
 
-app.on('second-instance', () => {
-  if (mainWindow) {
+app.on('second-instance', (_event, argv) => {
+  // Windows and Linux start a second copy with the link; this one opens it.
+  const id = installLinkIn(argv)
+  if (id) openInstallLink(id)
+  else if (mainWindow) {
     if (mainWindow.isMinimized()) mainWindow.restore()
     mainWindow.focus()
   }
@@ -436,6 +506,7 @@ app.whenReady().then(() => {
       encrypt: (text) => safeStorage.encryptString(text),
       decrypt: (data) => safeStorage.decryptString(data),
     },
+    open: (url) => void shell.openExternal(url),
   })
   settings = new SettingsService(fileStorage(join(app.getPath('userData'), 'settings.json')))
   board = new BoardService({
@@ -447,7 +518,7 @@ app.whenReady().then(() => {
   registerMonitorIpc(streaming.monitors)
   registerWindowIpc()
   registerBoardIpc(board)
-  registerWidgetIpc(widgets.installed, settings)
+  registerWidgetIpc(widgets, settings)
   registerDisplayIpc(controller)
   firewall = createFirewallMonitor()
   registerFirewallIpc(pairing, firewall)

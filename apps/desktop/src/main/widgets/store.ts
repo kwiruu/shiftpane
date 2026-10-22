@@ -20,10 +20,10 @@ import { fileStorage } from '../storage.ts'
 export type { ConfigValues }
 
 /** Where an installed widget came from: a folder on this PC, loaded in Developer mode. */
-export interface Origin {
-  kind: 'folder'
-  path: string
-}
+export type Origin =
+  | { kind: 'folder'; path: string }
+  /** Installed from the marketplace: the version and the package's sha256 the signed index gave. */
+  | { kind: 'marketplace'; version: string; sha256: string }
 
 export interface InstalledRecord {
   id: string
@@ -47,7 +47,14 @@ const Index = z.object({
     .array(
       z.object({
         id: z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/),
-        origin: z.object({ kind: z.literal('folder'), path: z.string().max(4096) }),
+        origin: z.discriminatedUnion('kind', [
+          z.object({ kind: z.literal('folder'), path: z.string().max(4096) }),
+          z.object({
+            kind: z.literal('marketplace'),
+            version: z.string().max(64),
+            sha256: z.string().regex(/^[0-9a-f]{64}$/),
+          }),
+        ]),
         installedAt: z.number(),
         updatedAt: z.number(),
         config: z.record(z.string(), ConfigValue),

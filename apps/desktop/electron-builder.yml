@@ -19,6 +19,10 @@ extraResources:
     to: phone
     filter: ['**/*']
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+# The site's Install buttons open shiftpane://install/<widget id>.
+protocols:
+  - name: ShiftPane
+    schemes: [shiftpane]
 
 win:
   target: [nsis]

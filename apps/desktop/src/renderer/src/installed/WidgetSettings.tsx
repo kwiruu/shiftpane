@@ -84,7 +84,9 @@ export function WidgetSettings({
         v{widget.version} · by {widget.author} · {widget.license}
       </p>
       <p className="mt-1 break-all font-mono text-ink-faint text-xs">
-        From the folder {widget.origin.path}
+        {widget.origin.kind === 'folder'
+          ? `From the folder ${widget.origin.path}`
+          : 'From the ShiftPane marketplace'}
       </p>
 
       {widget.hasCollector && <Status widget={widget} />}

@@ -386,3 +386,31 @@ describe('buttons', () => {
     expect(pressed).toHaveBeenCalledWith('volume-knob')
   })
 })
+
+describe('reloading folders in Developer mode', () => {
+  it('reloads a folder widget on save, but not one that asks for something new', async () => {
+    const { FolderWatcher } = await import('./folders.ts')
+    const t = setup()
+    await t.widgets.start()
+    const path = await folder('ring', gpuRing)
+    await install(t, path)
+    const watcher = new FolderWatcher({ installed: t.widgets, delayMs: 50 })
+    watcher.setEnabled(true)
+    await writeFile(
+      join(path, 'manifest.json'),
+      JSON.stringify({ ...gpuRing.manifest, name: 'GPU ring 2' }),
+    )
+    await vi.waitFor(() => expect(t.widgets.list()[0]?.name).toBe('GPU ring 2'), { timeout: 3000 })
+    await writeFile(
+      join(path, 'manifest.json'),
+      JSON.stringify({
+        ...gpuRing.manifest,
+        name: 'GPU ring 3',
+        permissions: { sources: ['gpu', 'media'] },
+      }),
+    )
+    await new Promise((done) => setTimeout(done, 600))
+    expect(t.widgets.list()[0]?.name).toBe('GPU ring 2')
+    watcher.stop()
+  })
+})

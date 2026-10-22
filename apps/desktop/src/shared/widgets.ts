@@ -35,19 +35,29 @@ export interface InstalledInfo {
   secrets: { name: string; set: boolean }[]
   /** False where the OS has no keychain to keep secrets in. */
   secretsAvailable: boolean
-  origin: { kind: 'folder'; path: string }
+  origin:
+    | { kind: 'folder'; path: string }
+    | { kind: 'marketplace'; version: string; sha256: string }
+  /** Why the marketplace withdrew this version, when it did; the widget no longer runs. */
+  revoked: string | null
+  /** A newer version the marketplace has, which this app can run. */
+  update: string | null
   installedAt: number
   updatedAt: number
   /** How its collector did last time, while some phone shows it. */
   status: { lastRunAt: number | null; problem: string | null }
 }
 
-/** A folder picked to load a widget from, checked before anything is installed. */
+/**
+ * A widget checked before anything is installed: a folder picked in Developer mode, or a version
+ * from the marketplace. `folder` is where it comes from, to show.
+ */
 export type FolderCheck =
   | { status: 'canceled' }
   | { status: 'invalid'; folder: string; problems: string[] }
   | {
       status: 'ready'
+      from: 'folder' | 'marketplace'
       /** Hand this to `install` to go ahead. */
       token: string
       folder: string
@@ -66,6 +76,46 @@ export type FolderCheck =
     }
 
 export type InstallResult = { ok: true; id: string } | { ok: false; problem: string }
+
+/** A widget in the marketplace, as the window's "Get widgets" lists it. */
+export interface StoreEntry {
+  id: string
+  name: string
+  summary: string
+  author: string
+  categories: string[]
+  latest: string
+  /** The newest version this app can run, or null when every one needs a newer app. */
+  version: string | null
+  /** The app version the latest needs, when this one is too old for it. */
+  needsApp: string | null
+  permissions: PermissionLine[]
+  sendsOffPc: boolean
+  /** How it looks, from its verified package; null when the package couldn't be read. */
+  preview: {
+    view: WidgetView
+    sample: Record<string, unknown>
+    sizes: WidgetSize[]
+    actions: ActionName[]
+    sources: SourceName[]
+    config: Record<string, string | number | boolean>
+  } | null
+  installed: { version: string; from: 'folder' | 'marketplace' } | null
+  /** Its id is one of ShiftPane's own widgets, which come with the app instead. */
+  builtIn: boolean
+}
+
+export type StoreList = { ok: true; widgets: StoreEntry[] } | { ok: false; problem: string }
+
+/** Signing in to the marketplace, to share widgets from this app. */
+export type AccountState =
+  | { status: 'signed-out'; problem?: string }
+  | { status: 'waiting'; userCode: string; verificationUri: string; expiresAt: number }
+  | { status: 'signed-in'; login: string }
+
+export type ShareResult =
+  | { ok: true; status: string; widgetId: string; version: string }
+  | { ok: false; problems: string[] }
 
 /** App-wide settings the desktop window changes. */
 export interface AppSettings {
