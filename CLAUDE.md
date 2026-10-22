@@ -28,7 +28,10 @@ TypeScript, a Cargo workspace for the native helper. See README.md for the layou
 - Widget packages (the marketplace's format) are defined in `packages/widget-sdk` and drawn by `ViewWidget` in
   `packages/board` from the same parts as the built-in widgets; give a new view node the built-in look by reusing
   `parts.tsx`. Collectors run in `packages/widget-runtime` (QuickJS) from the desktop main process
-  (`main/widgets/`), and their only way out is the guarded fetch in `main/widgets/fetch.ts`.
+  (`main/widgets/`), and their only way out is the guarded fetch in `packages/widget-runtime/src/fetch.ts`.
+- The marketplace site (the `shiftpane-market` repo) draws widgets with this repo's code: its `pnpm sync:shiftpane`
+  copies `widget-sdk`, `protocol`, `layout`, `board` and `ui`'s icons into its `vendor/shiftpane`. After changing
+  those, re-sync there so the gallery matches the phone.
 - OS-specific Rust goes behind `cfg` in `native/crates/{windows,macos,linux}`; every crate must still compile on every OS.
 - Electron windows keep `contextIsolation`, `sandbox` and no `nodeIntegration`; the renderer gets only `window.shiftpane`
   (typed in `apps/desktop/src/preload/api.ts`).
