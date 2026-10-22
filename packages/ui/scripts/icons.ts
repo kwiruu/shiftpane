@@ -14,6 +14,7 @@ const ICONS = {
   phone: 'smartphone-2-bold-duotone',
   layout: 'widget-5-bold-duotone',
   marketplace: 'shop-2-bold-duotone',
+  widgets: 'widget-6-bold-duotone',
   settings: 'settings-bold-duotone',
   monitor: 'monitor-smartphone-bold-duotone',
   network: 'wi-fi-router-bold-duotone',
@@ -47,6 +48,7 @@ const ICONS = {
   'chevron-right': 'alt-arrow-right-linear',
   down: 'arrow-down-linear',
   up: 'arrow-up-linear',
+  external: 'arrow-right-up-linear',
   // Widgets
   play: 'play-bold',
   pause: 'pause-bold',

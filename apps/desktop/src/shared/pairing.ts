@@ -96,7 +96,6 @@ export const IpcChannel = {
   widgetsSetConfig: 'widgets:set-config',
   widgetsSetSecret: 'widgets:set-secret',
   widgetsShare: 'widgets:share',
-  storeList: 'store:list',
   storeCheck: 'store:check',
   storeOpen: 'store:open',
   storeTakeOpen: 'store:take-open',

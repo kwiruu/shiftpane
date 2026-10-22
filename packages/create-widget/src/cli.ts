@@ -68,7 +68,7 @@ async function main(): Promise<number> {
   npm run dev        checks it${answers.template === 'web' ? ' and runs the collector' : ''}, again on every save
 
 To see it on your phone, turn on Developer mode in ShiftPane's Settings, then pick the folder
-under Marketplace > Installed > Choose a folder.`)
+under Widgets > Installed > Choose a folder.`)
   return 0
 }
 

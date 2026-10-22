@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { LayoutEditor } from './layout/LayoutEditor.tsx'
 import { DevicesPage } from './pages/DevicesPage.tsx'
-import { MarketplacePage } from './pages/MarketplacePage.tsx'
 import { SettingsPage } from './pages/SettingsPage.tsx'
+import { WidgetsPage } from './pages/WidgetsPage.tsx'
 import { Sidebar, type View } from './shell/Sidebar.tsx'
 import { TitleBar } from './shell/TitleBar.tsx'
 import { useBoard } from './useBoard.ts'
@@ -14,7 +14,7 @@ import { useSampleData } from './useSampleData.ts'
 const TITLES: Record<View, string> = {
   devices: 'Devices',
   layout: 'Phone layout',
-  marketplace: 'Marketplace',
+  widgets: 'Widgets',
   settings: 'Settings',
 }
 
@@ -24,11 +24,11 @@ export function App() {
   const display = useDisplay()
   const [board, setBoard] = useBoard()
   const [view, setView] = useState<View>('devices')
-  // A widget an install link (shiftpane://install/<id>) asked for, until the Marketplace shows it.
+  // A widget an install link (shiftpane://install/<id>) asked for, until the Widgets page shows it.
   const [openId, setOpenId] = useState<string | null>(null)
   useEffect(() => {
     const open = (id: string) => {
-      setView('marketplace')
+      setView('widgets')
       setOpenId(id)
     }
     void window.shiftpane.store.takeOpen().then((id) => {
@@ -38,7 +38,7 @@ export function App() {
   }, [])
   const phones = pairing.status === 'ready' ? pairing.phones : []
   // Only the pages that show widgets keep the sample data ticking.
-  const sampleUser = view === 'marketplace'
+  const sampleUser = view === 'widgets'
 
   return (
     <div className="flex h-full bg-surface-sunken text-ink">
@@ -52,8 +52,8 @@ export function App() {
             <DevicesPage pairing={pairing} firewall={firewall} display={display} />
           )}
           {view === 'layout' && <LayoutEditor phones={phones} />}
-          {view === 'marketplace' && sampleUser && (
-            <Marketplace
+          {view === 'widgets' && sampleUser && (
+            <Widgets
               board={board}
               onChange={setBoard}
               openId={openId}
@@ -75,8 +75,8 @@ export function App() {
   )
 }
 
-/** The marketplace with live previews; mounted only while it is open, so the samples stop. */
-function Marketplace(props: Omit<Parameters<typeof MarketplacePage>[0], 'data'>) {
+/** The widgets with live previews; mounted only while the page is open, so the samples stop. */
+function Widgets(props: Omit<Parameters<typeof WidgetsPage>[0], 'data'>) {
   const data = useSampleData()
-  return <MarketplacePage {...props} data={data} />
+  return <WidgetsPage {...props} data={data} />
 }

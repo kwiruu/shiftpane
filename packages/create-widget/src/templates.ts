@@ -177,7 +177,7 @@ npx shiftpane-widget pack      # the zip to upload at https://shiftpane.vercel.a
 \`\`\`
 
 To see it on your phone, turn on Developer mode in ShiftPane's Settings, then pick this folder
-under Marketplace > Installed > Choose a folder. It reloads when you save.
+under Widgets > Installed > Choose a folder. It reloads when you save.
 `
 }
 

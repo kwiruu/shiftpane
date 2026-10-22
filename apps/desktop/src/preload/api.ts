@@ -10,7 +10,6 @@ import type {
   InstalledInfo,
   InstallResult,
   ShareResult,
-  StoreList,
 } from '../shared/widgets.ts'
 
 /** The only surface the renderer gets: exposed as `window.shiftpane` by the preload script. */
@@ -86,10 +85,8 @@ export interface ShiftPaneApi {
     /** Packs a widget loaded from a folder and uploads it to the marketplace for review. */
     share(id: string, notes?: string): Promise<ShareResult>
   }
-  /** The marketplace: what it offers, checked against its signed index. */
+  /** The marketplace's widgets, read from its signed index: install links and updates. */
   store: {
-    /** Everything it offers; `refresh` asks again instead of using the last answer. */
-    list(refresh?: boolean): Promise<StoreList>
     /** Gets a widget's newest version this app can run and checks it, for the install prompt. */
     check(id: string): Promise<FolderCheck>
     /** An install link was opened (`shiftpane://install/<id>`); returns an unsubscribe function. */

@@ -289,9 +289,6 @@ function registerWidgetIpc(widgetsService: Widgets, appSettings: SettingsService
   void appSettings.get().then((value) => folders.setEnabled(value.developerMode))
   appSettings.on('change', (value) => folders.setEnabled(value.developerMode))
 
-  ipcMain.handle(IpcChannel.storeList, (event, refresh: unknown) =>
-    fromMainWindow(event) ? marketplace.list(refresh === true) : { ok: false, problem: '' },
-  )
   ipcMain.handle(
     IpcChannel.storeCheck,
     (event, id: unknown): Promise<FolderCheck> | FolderCheck => {

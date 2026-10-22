@@ -3,7 +3,7 @@ import { useState } from 'react'
 import type { ConnectedPhone } from '../../../shared/pairing.ts'
 import { Logo } from './Logo.tsx'
 
-export type View = 'devices' | 'layout' | 'marketplace' | 'settings'
+export type View = 'devices' | 'layout' | 'widgets' | 'settings'
 
 interface Item {
   id: View
@@ -14,7 +14,7 @@ interface Item {
 const MAIN: Item[] = [
   { id: 'devices', label: 'Devices', icon: 'devices' },
   { id: 'layout', label: 'Phone layout', icon: 'layout' },
-  { id: 'marketplace', label: 'Marketplace', icon: 'marketplace' },
+  { id: 'widgets', label: 'Widgets', icon: 'widgets' },
 ]
 
 const SETTINGS: Item = { id: 'settings', label: 'Settings', icon: 'settings' }

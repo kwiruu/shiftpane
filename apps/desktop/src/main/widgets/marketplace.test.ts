@@ -123,25 +123,6 @@ afterEach(async () => {
 })
 
 describe('Marketplace', () => {
-  it('lists widgets with a preview from their verified package', async () => {
-    publish({ version: '1.1.0' })
-    const { installed, marketplace } = setup()
-    await installed.start()
-    const list = await marketplace.list()
-    expect(list).toMatchObject({
-      ok: true,
-      widgets: [
-        {
-          id: 'gpu-ring',
-          version: '1.1.0',
-          installed: null,
-          builtIn: false,
-          preview: { sizes: ['small'], sources: ['gpu'] },
-        },
-      ],
-    })
-  })
-
   it('installs a version after the same prompt as a folder, and remembers where it came from', async () => {
     publish({ version: '1.1.0' })
     const { installed, marketplace } = setup()
@@ -193,7 +174,7 @@ describe('Marketplace', () => {
     })
   })
 
-  it('says when every version needs a newer app, and never offers a built-in id', async () => {
+  it('says when every version needs a newer app', async () => {
     publish({ version: '2.0.0' })
     const entry = index.widgets[0]
     if (!entry) throw new Error('no entry')
@@ -201,8 +182,6 @@ describe('Marketplace', () => {
     if (first) entry.versions['2.0.0'] = { ...first, minAppVersion: '9.0.0' }
     const { installed, marketplace } = setup()
     await installed.start()
-    const list = await marketplace.list()
-    expect(list).toMatchObject({ ok: true, widgets: [{ version: null, needsApp: '9.0.0' }] })
     expect(await marketplace.check('gpu-ring')).toMatchObject({
       status: 'invalid',
       problems: ['It needs ShiftPane 9.0.0 or later; this is 0.5.0.'],
