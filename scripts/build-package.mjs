@@ -74,7 +74,10 @@ if (types) {
       if (statSync(path).isDirectory()) walk(path)
       else if (name.endsWith('.test.d.ts')) rmSync(path)
       else if (name.endsWith('.d.ts')) {
-        const text = readFileSync(path, 'utf8').replace(/(from\s+['"]\.{1,2}\/[^'"]+)\.ts(['"])/g, '$1.js$2')
+        const text = readFileSync(path, 'utf8').replace(
+          /(from\s+['"]\.{1,2}\/[^'"]+)\.ts(['"])/g,
+          '$1.js$2',
+        )
         writeFileSync(path, text)
       }
     }
