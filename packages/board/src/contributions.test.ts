@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { calendarDate, contributionWeeks, contributionMonth } from './contributions.ts'
+import { calendarDate, contributionMonth, contributionWeeks } from './contributions.ts'
 
 const day = (date: string, count = 2, level = 2) => ({ date, count, level })
 const data = {

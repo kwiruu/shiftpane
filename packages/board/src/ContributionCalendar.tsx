@@ -1,3 +1,4 @@
+import { useId } from 'react'
 import { contributionMonth, contributionWeeks } from './contributions.ts'
 import { fluid } from './parts.tsx'
 
@@ -17,6 +18,7 @@ export function ContributionCalendar({
   monthOnly?: boolean
   boxesOnly?: boolean
 }) {
+  const descriptionId = useId()
   const calendar = monthOnly ? contributionMonth(data) : contributionWeeks(data, weeks)
   if (monthOnly || boxesOnly) {
     return (
@@ -27,9 +29,17 @@ export function ContributionCalendar({
             ? `0 0 89 ${Math.max(1, calendar.length) * 13 - 2}`
             : `0 0 ${Math.max(1, calendar.length) * 13 - 2} 89`
         }
-        role="group"
+        role="img"
+        aria-describedby={descriptionId}
         aria-label="GitHub contribution activity"
       >
+        <desc id={descriptionId}>
+          {calendar
+            .flat()
+            .filter((day) => day !== null)
+            .map((day) => `${day.date}: ${day.count} contributions`)
+            .join('; ')}
+        </desc>
         {calendar.map((week, row) =>
           week.map(
             (day, column) =>
@@ -42,7 +52,6 @@ export function ContributionCalendar({
                   height="11"
                   rx="2"
                   fill={COLORS[day.level]}
-                  role="img"
                   aria-label={`${day.date}: ${day.count} contributions`}
                 />
               ),
@@ -69,9 +78,17 @@ export function ContributionCalendar({
       <svg
         className="min-h-0 w-full flex-1"
         viewBox={`0 0 ${columns * 13} ${groups.length * blockHeight + (groups.length - 1) * 8}`}
-        role="group"
+        role="img"
+        aria-describedby={descriptionId}
         aria-label={`${total} contributions in the displayed period`}
       >
+        <desc id={descriptionId}>
+          {calendar
+            .flat()
+            .filter((day) => day !== null)
+            .map((day) => `${day.date}: ${day.count} contributions`)
+            .join('; ')}
+        </desc>
         {groups.map((group, groupIndex) =>
           group.map((week, x) => {
             const first = week.find((day) => day !== null)
@@ -105,7 +122,6 @@ export function ContributionCalendar({
                         height="10"
                         rx="2"
                         fill={COLORS[day.level]}
-                        role="img"
                         aria-label={`${day.date}: ${day.count} contributions`}
                       >
                         <title>

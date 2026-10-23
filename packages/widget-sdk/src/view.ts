@@ -65,7 +65,7 @@ export type ViewNode =
       count?: number
     }
   | { type: 'sparkline'; bind: string; color?: Accent }
-  /** Dated daily activity, arranged Sunday–Saturday in at most 54 weeks. */
+  /** Dated daily activity, arranged Sundayâ€“Saturday in at most 54 weeks. */
   | {
       type: 'contribution-calendar'
       bind: string
