@@ -45,6 +45,7 @@ const ICONS = {
   restore: 'copy-linear',
   'chevron-up': 'alt-arrow-up-linear',
   'chevron-down': 'alt-arrow-down-linear',
+  'chevron-left': 'alt-arrow-left-linear',
   'chevron-right': 'alt-arrow-right-linear',
   down: 'arrow-down-linear',
   up: 'arrow-up-linear',

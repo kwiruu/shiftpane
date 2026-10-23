@@ -283,7 +283,7 @@ const NOT_DEVELOPER: FolderCheck = {
  * widget was loaded from.
  */
 function registerWidgetIpc(widgetsService: Widgets, appSettings: SettingsService): void {
-  const { installed, marketplace, account, folders } = widgetsService
+  const { installed, marketplace, account, folders, studio, generator } = widgetsService
   const developer = async () => (await appSettings.get()).developerMode
   // Folder widgets reload on save while Developer mode is on.
   void appSettings.get().then((value) => folders.setEnabled(value.developerMode))
@@ -302,6 +302,32 @@ function registerWidgetIpc(widgetsService: Widgets, appSettings: SettingsService
     const id = pendingInstall
     pendingInstall = null
     return id
+  })
+  // Widget Studio: the window sends a recipe, never a path; Studio picks the folder.
+  ipcMain.handle(IpcChannel.studioGet, (event, id: unknown) => {
+    const parsed = WidgetId.safeParse(id)
+    return fromMainWindow(event) && parsed.success ? studio.get(parsed.data) : null
+  })
+  ipcMain.handle(IpcChannel.studioIds, (event) => (fromMainWindow(event) ? studio.ids() : []))
+  ipcMain.handle(
+    IpcChannel.studioSave,
+    (event, recipe: unknown, id: unknown, author: unknown): Promise<FolderCheck> | FolderCheck => {
+      if (!fromMainWindow(event)) return { status: 'canceled' }
+      const target = WidgetId.safeParse(id)
+      return studio.save(recipe, target.success ? target.data : null, author)
+    },
+  )
+  ipcMain.handle(IpcChannel.generatorModels, (event) =>
+    fromMainWindow(event) ? generator.models() : { ok: false, problem: '' },
+  )
+  ipcMain.handle(IpcChannel.generatorRun, (event, prompt: unknown, model: unknown) => {
+    if (!fromMainWindow(event) || typeof prompt !== 'string' || typeof model !== 'string') {
+      return { ok: false, problem: 'Nothing to make.' }
+    }
+    return generator.generate(prompt, model)
+  })
+  ipcMain.handle(IpcChannel.generatorCancel, (event) => {
+    if (fromMainWindow(event)) generator.cancel()
   })
   ipcMain.handle(IpcChannel.accountGet, (event) => (fromMainWindow(event) ? account.state : null))
   ipcMain.handle(IpcChannel.accountSignIn, (event) =>
@@ -497,6 +523,7 @@ app.whenReady().then(() => {
     hub: pairing.hub,
     helper: async () => (await helper.session()).channel,
     dataDir: app.getPath('userData'),
+    studioDir: join(app.getPath('documents'), 'ShiftPane widgets'),
     appVersion: app.getVersion(),
     cipher: {
       available: () => safeStorage.isEncryptionAvailable(),

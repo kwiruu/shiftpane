@@ -4,13 +4,17 @@ import type { CaptureEvent } from '../shared/capture.ts'
 import type { DisplayState } from '../shared/display.ts'
 import type { FirewallAllowResult, FirewallState } from '../shared/firewall.ts'
 import { IpcChannel, type PairingState } from '../shared/pairing.ts'
+import type { Recipe } from '../shared/studio.ts'
 import type {
   AccountState,
   AppSettings,
   FolderCheck,
+  GeneratorModels,
+  GeneratorResult,
   InstalledInfo,
   InstallResult,
   ShareResult,
+  StudioWidget,
 } from '../shared/widgets.ts'
 import type { ShiftPaneApi } from './api.ts'
 
@@ -99,6 +103,18 @@ const api: ShiftPaneApi = {
       return () => ipcRenderer.off(IpcChannel.storeOpen, handler)
     },
     takeOpen: () => ipcRenderer.invoke(IpcChannel.storeTakeOpen) as Promise<string | null>,
+  },
+  studio: {
+    get: (id) => ipcRenderer.invoke(IpcChannel.studioGet, id) as Promise<StudioWidget | null>,
+    ids: () => ipcRenderer.invoke(IpcChannel.studioIds) as Promise<string[]>,
+    save: (recipe: Recipe, id, author) =>
+      ipcRenderer.invoke(IpcChannel.studioSave, recipe, id, author) as Promise<FolderCheck>,
+  },
+  generator: {
+    models: () => ipcRenderer.invoke(IpcChannel.generatorModels) as Promise<GeneratorModels>,
+    run: (prompt, model) =>
+      ipcRenderer.invoke(IpcChannel.generatorRun, prompt, model) as Promise<GeneratorResult>,
+    cancel: () => ipcRenderer.invoke(IpcChannel.generatorCancel) as Promise<void>,
   },
   account: {
     get: () => ipcRenderer.invoke(IpcChannel.accountGet) as Promise<AccountState>,

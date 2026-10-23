@@ -3,7 +3,14 @@ import { z } from 'zod'
 import { type AppSettings, DEFAULT_SETTINGS } from '../shared/widgets.ts'
 import type { TextStorage } from './storage.ts'
 
-const Saved = z.object({ developerMode: z.boolean().default(false) })
+const Saved = z.object({
+  developerMode: z.boolean().default(false),
+  generatorModel: z
+    .string()
+    .regex(/^[\w.:/-]{1,128}$/)
+    .nullable()
+    .default(null),
+})
 
 /** App-wide settings from the desktop window, kept between runs. */
 export class SettingsService extends EventEmitter<{ change: [AppSettings] }> {

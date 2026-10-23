@@ -14,6 +14,7 @@ import {
   pressMediaButton,
 } from './collectors.ts'
 import { FolderWatcher } from './folders.ts'
+import { Generator } from './generator.ts'
 import { InstalledWidgets } from './installed.ts'
 import { Marketplace } from './marketplace.ts'
 import { Registry } from './registry.ts'
@@ -21,12 +22,15 @@ import { type Cipher, WidgetSecrets } from './secrets.ts'
 import { WidgetService } from './service.ts'
 import { SourceReader } from './sources.ts'
 import { InstalledStore } from './store.ts'
+import { Studio } from './studio.ts'
 
 export interface WidgetsOptions {
   hub: PhoneHub
   helper: HelperAccess
   /** The app's data folder: installed widgets and their secrets are kept in it. */
   dataDir: string
+  /** Where Widget Studio writes the widgets it makes (Documents\ShiftPane widgets). */
+  studioDir: string
   appVersion: string
   /** Electron's safeStorage, for widgets' secrets and the marketplace sign-in. */
   cipher: Cipher
@@ -42,6 +46,8 @@ export interface Widgets {
   marketplace: Marketplace
   account: MarketplaceAccount
   folders: FolderWatcher
+  studio: Studio
+  generator: Generator
   /** Packs a widget loaded from a folder and uploads it for review, as the signed-in author. */
   share(id: string, notes?: string): Promise<ShareResult>
   stop(): void
@@ -114,6 +120,13 @@ export function startWidgets(options: WidgetsOptions): Widgets {
     log,
   })
   const folders = new FolderWatcher({ installed, log })
+  const studio = new Studio({
+    installed,
+    folder: options.studioDir,
+    storage: fileStorage(join(options.dataDir, 'studio-recipes.json')),
+    appVersion: options.appVersion,
+  })
+  const generator = new Generator({ log: (message) => log(`generator: ${message}`) })
   void installed.start().then(() => marketplace.start())
   void account.load()
   return {
@@ -123,6 +136,8 @@ export function startWidgets(options: WidgetsOptions): Widgets {
     marketplace,
     account,
     folders,
+    studio,
+    generator,
     async share(id, notes) {
       const origin = installed.origin(id)
       if (origin?.kind !== 'folder') {
@@ -139,6 +154,7 @@ export function startWidgets(options: WidgetsOptions): Widgets {
       marketplace.stop()
       account.cancel()
       folders.stop()
+      generator.cancel()
     },
   }
 }

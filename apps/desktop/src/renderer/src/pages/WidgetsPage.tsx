@@ -15,6 +15,7 @@ import type { FolderCheck } from '../../../shared/widgets.ts'
 import { InstallPrompt } from '../installed/InstallPrompt.tsx'
 import { WidgetSettings } from '../installed/WidgetSettings.tsx'
 import { Button, Card, Chip } from '../shell/parts.tsx'
+import { StudioPage } from '../studio/StudioPage.tsx'
 import { useInstalled } from '../useInstalled.ts'
 import { useSettings } from '../useSettings.ts'
 
@@ -46,8 +47,8 @@ const keyOf = (what: NewWidget) => (typeof what === 'string' ? what : `installed
 /**
  * The widgets this PC has, each with a live preview, to put on the phone: the built-in ones, the
  * ones installed, and (in Developer mode) loading one from a folder. New ones come from the
- * website's gallery: its "Install in ShiftPane" opens an install link here, which shows what the
- * widget can do before it installs.
+ * website's gallery, whose "Install in ShiftPane" opens an install link here, or from Widget
+ * Studio, which opens in place of the list. Either way the widget's permissions show first.
  */
 export function WidgetsPage({
   board,
@@ -70,6 +71,12 @@ export function WidgetsPage({
   const [added, setAdded] = useState<{ key: string; table: number } | null>(null)
   const [check, setCheck] = useState<Exclude<FolderCheck, { status: 'canceled' }> | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
+  // Widget Studio, open on a new widget (null) or one it made; undefined while the list shows.
+  const [studio, setStudio] = useState<string | null | undefined>(undefined)
+  const [studioIds, setStudioIds] = useState<string[]>([])
+  useEffect(() => {
+    if (studio === undefined) void window.shiftpane.studio.ids().then(setStudioIds)
+  }, [studio])
 
   // An install link: the installed widgets, and the prompt for that one.
   useEffect(() => {
@@ -140,6 +147,51 @@ export function WidgetsPage({
 
   const editingWidget = installed.find((item) => item.id === editing) ?? null
 
+  const dialogs = (
+    <>
+      <InstallPrompt
+        check={check}
+        onClose={() => setCheck(null)}
+        onInstalled={(id) => {
+          setCheck(null)
+          setFilter('Installed')
+          setEditing(id)
+        }}
+      />
+      <WidgetSettings
+        widget={editingWidget}
+        developer={developer}
+        onClose={() => setEditing(null)}
+        onReload={(id) => void loadFolder(id)}
+        onEdit={
+          editing && studioIds.includes(editing)
+            ? () => {
+                setStudio(editing)
+                setEditing(null)
+              }
+            : undefined
+        }
+      />
+    </>
+  )
+
+  if (studio !== undefined) {
+    return (
+      <>
+        <StudioPage
+          editId={studio}
+          data={data}
+          onBack={() => setStudio(undefined)}
+          onSaved={(result) => {
+            setStudio(undefined)
+            setCheck(result)
+          }}
+        />
+        {dialogs}
+      </>
+    )
+  }
+
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-3">
@@ -202,7 +254,13 @@ export function WidgetsPage({
                 <WidgetTile
                   key={`installed:${item.id}`}
                   title={item.name}
-                  chip={item.origin.kind === 'folder' ? 'From a folder' : 'Installed'}
+                  chip={
+                    studioIds.includes(item.id)
+                      ? 'Made in Studio'
+                      : item.origin.kind === 'folder'
+                        ? 'From a folder'
+                        : 'Installed'
+                  }
                   widget={{ kind: 'installed', widget: item.id, tone: fresh.tone }}
                   wide={fresh.columns === 2}
                   description={item.description}
@@ -245,6 +303,19 @@ export function WidgetsPage({
             </li>
           )}
           {showsInstalled && (
+            <li>
+              <Placeholder
+                icon="widget-add"
+                title="Make a widget"
+                text="Pick PC readings and how to show them, or describe it in a sentence. No code, and the phone's cards preview it as you go."
+              >
+                <Button tone="primary" icon="widgets" size="md" onClick={() => setStudio(null)}>
+                  Open Widget Studio
+                </Button>
+              </Placeholder>
+            </li>
+          )}
+          {showsInstalled && (
             <li className="sm:col-span-2">
               <Placeholder
                 icon="marketplace"
@@ -272,22 +343,7 @@ export function WidgetsPage({
           )}
         </ul>
       </div>
-
-      <InstallPrompt
-        check={check}
-        onClose={() => setCheck(null)}
-        onInstalled={(id) => {
-          setCheck(null)
-          setFilter('Installed')
-          setEditing(id)
-        }}
-      />
-      <WidgetSettings
-        widget={editingWidget}
-        developer={developer}
-        onClose={() => setEditing(null)}
-        onReload={(id) => void loadFolder(id)}
-      />
+      {dialogs}
     </div>
   )
 }

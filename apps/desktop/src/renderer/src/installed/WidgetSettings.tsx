@@ -28,12 +28,15 @@ export function WidgetSettings({
   developer,
   onClose,
   onReload,
+  onEdit,
 }: {
   widget: InstalledInfo | null
   developer: boolean
   onClose: () => void
   /** Load it again from its folder: checked, then confirmed like a first install. */
   onReload: (id: string) => void
+  /** Opens it in Widget Studio, for a widget Studio made. */
+  onEdit?: () => void
 }) {
   const [confirmRemove, setConfirmRemove] = useState(false)
   if (!widget) return null
@@ -69,6 +72,11 @@ export function WidgetSettings({
           >
             {confirmRemove ? 'Click again to remove it' : 'Remove'}
           </Button>
+          {onEdit && (
+            <Button icon="widgets" size="md" onClick={onEdit}>
+              Edit in Studio
+            </Button>
+          )}
           {developer && (
             <Button icon="refresh" size="md" onClick={() => onReload(widget.id)}>
               Load again
