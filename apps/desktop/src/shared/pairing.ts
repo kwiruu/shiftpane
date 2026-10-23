@@ -50,6 +50,9 @@ export type PairingState =
       port: number
       /** SHA-256 fingerprint of the self-signed certificate, for the user to compare on the phone. */
       fingerprint: string
+      /** Token-free test page and request observations for the current network/code. */
+      connectionTestQrSvg: string
+      diagnostics: { pageAt: number | null; testAt: number | null; socketAt: number | null }
       code: PairingCodeState
       phones: ConnectedPhone[]
       /** Every paired phone, connected or not, most recently seen first. */

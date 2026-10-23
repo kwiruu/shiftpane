@@ -4,7 +4,7 @@ import { DEFAULT_PORT, MAX_FRAME_BYTES, PORT_RANGE, WS_PATH } from '@shiftpane/p
 import { WebSocket, WebSocketServer } from 'ws'
 import type { TlsCredentials } from './certificate.ts'
 import type { PhoneHub } from './phone-hub.ts'
-import { createStaticHandler } from './static.ts'
+import { createStaticHandler, securityHeaders } from './static.ts'
 
 export interface LanServerOptions {
   tls: TlsCredentials
@@ -19,11 +19,14 @@ export interface LanServerOptions {
   host?: string
   /** How often to ping sockets; a socket that misses one ping is dropped (dead Wi-Fi). */
   heartbeatMs?: number
+  /** HTTP observations from another device; excludes local self-checks and URL tokens. */
+  onPhoneRequest?: (stage: 'page' | 'test' | 'socket') => void
 }
 
 export interface LanServer {
   port: number
   close(): Promise<void>
+  updateTls(tls: TlsCredentials): void
 }
 
 /**
@@ -36,6 +39,24 @@ export async function startLanServer(options: LanServerOptions): Promise<LanServ
   const server = createServer(
     { cert: options.tls.cert, key: options.tls.key, minVersion: 'TLSv1.2' },
     (req, res) => {
+      const path = (req.url ?? '/').split('?')[0]
+      if (req.method === 'GET' && isRemoteDevice(req.socket.remoteAddress, req.socket.localAddress))
+        res.once('finish', () => {
+          if (
+            res.statusCode === 200 &&
+            (path === '/' || path === '/index.html' || path === '/connection-test')
+          )
+            options.onPhoneRequest?.(path === '/connection-test' ? 'test' : 'page')
+        })
+      if (path === '/connection-test' && (req.method === 'GET' || req.method === 'HEAD')) {
+        res.writeHead(200, {
+          ...securityHeaders(req.headers.host),
+          'Content-Type': 'text/html; charset=utf-8',
+          'Cache-Control': 'no-store',
+        })
+        res.end(req.method === 'HEAD' ? undefined : CONNECTION_TEST_HTML)
+        return
+      }
       serveStatic(req, res).catch(() => {
         if (!res.headersSent) res.writeHead(500)
         res.end()
@@ -50,6 +71,8 @@ export async function startLanServer(options: LanServerOptions): Promise<LanServ
       socket.end('HTTP/1.1 403 Forbidden\r\n\r\n')
       return
     }
+    if (isRemoteDevice(req.socket.remoteAddress, req.socket.localAddress))
+      options.onPhoneRequest?.('socket')
     wss.handleUpgrade(req, socket, head, (ws) => {
       const handlers = options.hub.accept({
         remoteAddress: req.socket.remoteAddress ?? 'unknown',
@@ -85,6 +108,7 @@ export async function startLanServer(options: LanServerOptions): Promise<LanServ
   const port = await listen(server, candidatePorts(options.port), options.host ?? '0.0.0.0')
   return {
     port,
+    updateTls: (tls) => server.setSecureContext({ cert: tls.cert, key: tls.key }),
     close: () =>
       new Promise<void>((resolve) => {
         for (const client of wss.clients) client.terminate()
@@ -132,4 +156,14 @@ function listen(server: Server, ports: readonly number[], host: string): Promise
     })
     server.listen(ports[next++], host)
   })
+}
+
+/** No scripts, pairing tokens or app assets: isolates basic HTTPS reachability. */
+const CONNECTION_TEST_HTML = `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ShiftPane connection test</title><body style="background:#111;color:#eee;font:18px/1.5 system-ui,sans-serif;padding:32px"><h1>Connection reached your PC</h1><p>This phone can load a page from ShiftPane over this network.</p><p>Return to the PC and scan the main pairing QR code to connect. This test does not pair your phone.</p></body></html>`
+
+/** Exclude loopback and connections the PC makes to its own LAN address. */
+export function isRemoteDevice(remote: string | undefined, local: string | undefined): boolean {
+  const address = remote?.replace(/^::ffff:/, '')
+  const own = local?.replace(/^::ffff:/, '')
+  return Boolean(address && address !== own && !address.startsWith('127.') && address !== '::1')
 }

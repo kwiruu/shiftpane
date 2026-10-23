@@ -14,7 +14,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { WebSocket } from 'ws'
 import { createCertificate } from './certificate.ts'
 import { PhoneHub } from './phone-hub.ts'
-import { candidatePorts, type LanServer, startLanServer } from './server.ts'
+import { candidatePorts, isRemoteDevice, type LanServer, startLanServer } from './server.ts'
 
 const token = generatePairingToken()
 let server: LanServer
@@ -82,6 +82,15 @@ const hello = (pairingToken: string) =>
   })
 
 describe('LAN server', () => {
+  it('serves a standalone connection test without pairing or script assets', async () => {
+    const page = await get('/connection-test')
+    expect(page.status).toBe(200)
+    expect(page.body).toContain('Connection reached your PC')
+    expect(page.body).not.toContain('<script')
+    expect(page.headers['cache-control']).toBe('no-store')
+    expect(hub.phones).toHaveLength(0)
+  })
+
   it('serves the phone app over HTTPS with security headers', async () => {
     const page = await get('/')
     expect(page.status).toBe(200)
@@ -155,4 +164,13 @@ describe('candidatePorts', () => {
     ).toHaveLength(1)
     expect(candidatePorts(0)).toEqual([0])
   })
+})
+
+it('does not count PC or loopback checks as a phone reaching the server', () => {
+  expect(isRemoteDevice('192.168.1.36', '192.168.1.109')).toBe(true)
+  expect(isRemoteDevice('::ffff:192.168.1.36', '::ffff:192.168.1.109')).toBe(true)
+  expect(isRemoteDevice('192.168.1.109', '192.168.1.109')).toBe(false)
+  expect(isRemoteDevice('127.0.0.2', '127.0.0.1')).toBe(false)
+  expect(isRemoteDevice('::1', '::1')).toBe(false)
+  expect(isRemoteDevice(undefined, undefined)).toBe(false)
 })
