@@ -16,7 +16,7 @@ import {
 } from './account.ts'
 import { configFromArgs, runOnce } from './dev.ts'
 
-const VERSION = '0.5.1'
+const VERSION = '0.6.0'
 
 const HELP = `shiftpane-widget ${VERSION}: check, run, pack and publish ShiftPane widgets
 

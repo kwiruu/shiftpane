@@ -92,6 +92,7 @@ async function folder(name: string, widget: Fixture | typeof stars, extra: objec
 
 function setup(
   options: {
+    appVersion?: string
     run?: (input: RunInput) => Promise<RunResult>
     now?: () => number
     press?: (action: ActionName, value?: number) => Promise<void>
@@ -124,7 +125,7 @@ function setup(
     secrets,
     sources: sources as unknown as SourceReader,
     hub: hub as never,
-    appVersion: '0.5.0',
+    appVersion: options.appVersion ?? '0.5.0',
     run,
     now: options.now,
     press: options.press,
@@ -145,6 +146,24 @@ async function install(t: ReturnType<typeof setup>, path: string) {
 }
 
 describe('checking a folder', () => {
+  it('installs a contribution calendar on 0.6.0 and refuses it on 0.5.0', async () => {
+    const path = await folder('contributions', {
+      ...gpuRing,
+      manifest: { ...gpuRing.manifest, id: 'github-contributions', minAppVersion: '0.6.0' },
+      view: { small: { type: 'contribution-calendar', bind: '/calendar' } },
+      sample: { calendar: {} },
+      collector: 'export default async () => ({ calendar: {} })',
+    })
+    const old = setup()
+    await old.widgets.start()
+    expect((await old.widgets.check(path)).status).toBe('invalid')
+    const compatible = setup({ appVersion: '0.6.0' })
+    await compatible.widgets.start()
+    await install(compatible, path)
+    expect(compatible.widgets.list()[0]?.id).toBe('github-contributions')
+    old.widgets.stop()
+    compatible.widgets.stop()
+  })
   it('says what the widget may do before anything is installed', async () => {
     const t = setup()
     await t.widgets.start()

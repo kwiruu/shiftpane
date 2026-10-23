@@ -61,6 +61,14 @@ export type ViewNode =
       count?: number
     }
   | { type: 'sparkline'; bind: string; color?: Accent }
+  | {
+      type: 'contribution-calendar'
+      bind: string
+      weeks?: number
+      split?: boolean
+      monthOnly?: boolean
+      boxesOnly?: boolean
+    }
   | { type: 'list'; bind: string; max?: number }
   | { type: 'icon'; name: string; color?: Accent }
   | { type: 'button'; action: ActionName; icon: string; label: string }
@@ -209,6 +217,16 @@ export const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
       })
       .strict(),
     z.object({ type: z.literal('sparkline'), bind: Bind, color: AccentSchema.optional() }).strict(),
+    z
+      .object({
+        type: z.literal('contribution-calendar'),
+        bind: Bind,
+        weeks: z.number().int().min(1).max(54).optional(),
+        split: z.boolean().optional(),
+        monthOnly: z.boolean().optional(),
+        boxesOnly: z.boolean().optional(),
+      })
+      .strict(),
     z
       .object({
         type: z.literal('list'),
