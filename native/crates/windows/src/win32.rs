@@ -376,7 +376,11 @@ fn display_source(device: &str) -> Option<(LUID, u32)> {
     let (mut path_count, mut mode_count) = (0_u32, 0_u32);
     // SAFETY: both out-pointers are valid for the call.
     let code = unsafe {
-        GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, &raw mut path_count, &raw mut mode_count)
+        GetDisplayConfigBufferSizes(
+            QDC_ONLY_ACTIVE_PATHS,
+            &raw mut path_count,
+            &raw mut mode_count,
+        )
     };
     if code != 0 {
         return None;

@@ -1,6 +1,6 @@
 [package]
 name = "shiftpane-linux"
-description = "Linux backend: compositor-specific virtual outputs (Mutter, KWin, wlroots, X11)"
+description = "Linux backend: compositor-specific virtual outputs (Sway, Hyprland, X11; Mutter and KWin later)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,6 +9,7 @@ repository.workspace = true
 
 [dependencies]
 shiftpane-core.workspace = true
+serde_json.workspace = true
 
 [lints]
 workspace = true
