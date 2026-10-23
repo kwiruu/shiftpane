@@ -26,6 +26,12 @@ describe('resolveStaticPath', () => {
 })
 
 describe('phone connection policy', () => {
+  it('allows the trusted home screen icon without allowing other external images', () => {
+    const policy = securityHeaders('192.168.1.20:47820')['Content-Security-Policy']
+    expect(policy?.split('; ').find((directive) => directive.startsWith('img-src '))).toBe(
+      "img-src 'self' data: blob: https://raw.githubusercontent.com/kwiruu/shiftpane/main/apps/phone/public/apple-touch-icon.png",
+    )
+  })
   it('explicitly permits only the page host and port for secure WebSockets', () => {
     for (const host of ['192.168.1.20:47820', 'pc.local:47821', '[::1]:47820']) {
       expect(securityHeaders(host)['Content-Security-Policy']).toContain(

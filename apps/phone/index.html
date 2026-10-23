@@ -10,7 +10,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="ShiftPane" />
     <link rel="icon" href="./icon.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <!-- iOS fetches home screen icons outside Safari's certificate exception. Use trusted
+         HTTPS for this icon because the desktop server has a self-signed certificate. -->
+    <link rel="apple-touch-icon" sizes="180x180" href="https://raw.githubusercontent.com/kwiruu/shiftpane/main/apps/phone/public/apple-touch-icon.png" />
     <title>ShiftPane</title>
   </head>
   <body>
