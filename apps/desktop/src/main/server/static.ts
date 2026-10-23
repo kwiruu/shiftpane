@@ -23,7 +23,8 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
     "default-src 'self'",
     "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    // iOS downloads the home screen icon over trusted HTTPS, outside the LAN certificate exception.
+    "img-src 'self' data: blob: https://raw.githubusercontent.com/kwiruu/shiftpane/main/apps/phone/public/apple-touch-icon.png",
     "media-src 'self' blob:",
     "connect-src 'self'",
     "frame-src 'self'",
