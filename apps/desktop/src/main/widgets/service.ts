@@ -10,7 +10,7 @@ export interface WidgetCollector {
   intervalMs: number
   /** Send only when the data changed (media), instead of on every run (stats). */
   onlyOnChange?: boolean
-  collect(): Promise<WidgetData>
+  collect(force?: boolean): Promise<WidgetData>
 }
 
 export interface WidgetServiceOptions {
@@ -143,7 +143,7 @@ export class WidgetService {
       if (!collector || this.#running.has(id)) continue
       const timer = setInterval(() => void this.#run(id), collector.intervalMs)
       this.#running.set(id, { timer, busy: false })
-      void this.#run(id)
+      void this.#run(id, true)
     }
     for (const [id, running] of this.#running) {
       if (needed.has(id)) continue
@@ -160,7 +160,7 @@ export class WidgetService {
     if (!running || !collector || running.busy) return
     running.busy = true
     try {
-      const data = await collector.collect()
+      const data = await collector.collect(force)
       if (this.#running.get(id) !== running) return
       const json = JSON.stringify(data)
       if (collector.onlyOnChange && !force && this.#last.get(id)?.json === json) return

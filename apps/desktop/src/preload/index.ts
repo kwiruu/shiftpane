@@ -88,6 +88,9 @@ const api: ShiftPaneApi = {
     install: (token) =>
       ipcRenderer.invoke(IpcChannel.widgetsInstall, token) as Promise<InstallResult>,
     remove: (id) => ipcRenderer.invoke(IpcChannel.widgetsRemove, id) as Promise<void>,
+    searchLocations: (id, query) =>
+      ipcRenderer.invoke(IpcChannel.widgetsSearchLocations, id, query),
+    cancelLocationSearch: (id) => ipcRenderer.invoke(IpcChannel.widgetsCancelLocationSearch, id),
     setConfig: (id, values) =>
       ipcRenderer.invoke(IpcChannel.widgetsSetConfig, id, values) as Promise<string[]>,
     setSecret: (id, name, value) =>

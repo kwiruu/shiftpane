@@ -305,6 +305,31 @@ describe('installed widgets', () => {
     await vi.waitFor(() => expect(t.run).toHaveBeenCalledTimes(2))
   })
 
+  it('returns a fresh countdown on reconnect before its normal refresh is due', async () => {
+    let remaining = 2
+    const t = setup({ now: () => 1_000, run: async () => ({ ok: true, output: { remaining } }) })
+    await t.widgets.start()
+    await install(
+      t,
+      await folder('countdown', {
+        ...stars,
+        manifest: {
+          ...stars.manifest,
+          id: 'countdown',
+          refreshSeconds: 60,
+          permissions: { network: [], secrets: [] },
+        },
+      }),
+    )
+    await t.widgets.setConfig('countdown', { owner: 'Launch' })
+    const collector = t.widgets.collectors().countdown
+    expect(await collector?.collect()).toMatchObject({ output: { remaining: 2 } })
+    remaining = 0
+    expect(await collector?.collect()).toMatchObject({ output: { remaining: 2 } })
+    expect(await collector?.collect(true)).toMatchObject({ output: { remaining: 0 } })
+    t.widgets.stop()
+  })
+
   it("keep a collector's last output when a later run fails", async () => {
     let now = 0
     let fail = false

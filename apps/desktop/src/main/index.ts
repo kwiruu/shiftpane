@@ -39,6 +39,7 @@ import { fileStorage } from './storage.ts'
 import { acceptSource } from './stream/monitors.ts'
 import { type StreamingService, startStreaming } from './stream/service.ts'
 import { startWidgets, type Widgets } from './widgets/index.ts'
+import { canSearchLocations, LocationSearch } from './widgets/locations.ts'
 
 const isDev = !app.isPackaged && process.env.ELECTRON_RENDERER_URL !== undefined
 const platform =
@@ -362,6 +363,19 @@ function registerWidgetIpc(widgetsService: Widgets, appSettings: SettingsService
     mainWindow?.webContents.send(IpcChannel.settingsChanged, value),
   )
 
+  const locations = new LocationSearch()
+  ipcMain.handle(IpcChannel.widgetsSearchLocations, (event, id: unknown, query: unknown) => {
+    if (!fromMainWindow(event) || typeof id !== 'string')
+      return { locations: [], problem: 'Search unavailable.' }
+    const widget = installed.list().find((item) => item.id === id)
+    if (!canSearchLocations(true, widget)) {
+      return { locations: [], problem: 'This widget cannot search locations.' }
+    }
+    return locations.search(id, query)
+  })
+  ipcMain.handle(IpcChannel.widgetsCancelLocationSearch, (event, id: unknown) => {
+    if (fromMainWindow(event) && typeof id === 'string') locations.cancel(id)
+  })
   ipcMain.handle(IpcChannel.widgetsList, (event) => (fromMainWindow(event) ? installed.list() : []))
   ipcMain.handle(IpcChannel.widgetsChooseFolder, async (event): Promise<FolderCheck> => {
     if (!fromMainWindow(event) || !mainWindow) return { status: 'canceled' }

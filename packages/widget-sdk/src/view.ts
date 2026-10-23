@@ -21,6 +21,8 @@ export type ViewNode =
       children: ViewNode[]
       gap?: number
       align?: 'start' | 'center' | 'end' | 'between'
+      /** An opaque color gradient, with light text, extending to the card's edges. */
+      surface?: 'blue' | 'violet'
       /** A row only: keeps its ends in from the card's edges, like the media buttons on a wide card. */
       inset?: boolean
     }
@@ -38,7 +40,7 @@ export type ViewNode =
       bind: string
       format?: ValueFormat
       unit?: string
-      size?: 'sm' | 'md' | 'lg' | 'xl'
+      size?: 'sm' | 'md' | 'lg' | 'xl' | 'hero'
     }
   | {
       type: 'ring'
@@ -70,7 +72,7 @@ export type ViewNode =
       boxesOnly?: boolean
     }
   | { type: 'list'; bind: string; max?: number }
-  | { type: 'icon'; name: string; color?: Accent }
+  | { type: 'icon'; name: string; bind?: string; color?: Accent }
   | { type: 'button'; action: ActionName; icon: string; label: string }
   /** A hairline across the card. */
   | { type: 'divider' }
@@ -104,6 +106,16 @@ export type WidgetView = Partial<Record<WidgetSize, ViewNode>>
  * icon set; a name it doesn't know draws a dot rather than failing, so this list can grow.
  */
 export const widgetIcons = [
+  'sun',
+  'moon',
+  'cloud',
+  'cloud-sun',
+  'cloud-moon',
+  'rain',
+  'snow',
+  'fog',
+  'storm',
+  'calendar',
   'activity',
   'bolt',
   'coffee',
@@ -147,6 +159,7 @@ export const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
     z
       .object({
         type: z.literal('stack'),
+        surface: z.enum(['blue', 'violet']).optional(),
         children: z.array(viewNodeSchema).max(24),
         gap: z.number().min(0).max(12).optional(),
         align: z.enum(['start', 'center', 'end', 'between']).optional(),
@@ -155,6 +168,7 @@ export const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
     z
       .object({
         type: z.literal('row'),
+        surface: z.enum(['blue', 'violet']).optional(),
         children: z.array(viewNodeSchema).max(24),
         gap: z.number().min(0).max(12).optional(),
         align: z.enum(['start', 'center', 'end', 'between']).optional(),
@@ -186,8 +200,8 @@ export const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
         format: z
           .enum(['percent', 'number', 'compact', 'bytes', 'rate', 'celsius', 'duration'])
           .optional(),
-        unit: z.string().max(12).optional(),
-        size: z.enum(['sm', 'md', 'lg', 'xl']).optional(),
+        unit: z.string().max(120).optional(),
+        size: z.enum(['sm', 'md', 'lg', 'xl', 'hero']).optional(),
       })
       .strict(),
     z
@@ -234,7 +248,14 @@ export const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
         max: z.number().int().min(1).max(20).optional(),
       })
       .strict(),
-    z.object({ type: z.literal('icon'), name: IconName, color: AccentSchema.optional() }).strict(),
+    z
+      .object({
+        type: z.literal('icon'),
+        name: IconName,
+        bind: Bind.optional(),
+        color: AccentSchema.optional(),
+      })
+      .strict(),
     z
       .object({
         type: z.literal('button'),

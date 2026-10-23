@@ -50,11 +50,13 @@ export function Value({
   value,
   unit,
   size,
+  raisedUnit = false,
   className = '',
 }: {
   value: ReactNode
   unit?: string
   size: string
+  raisedUnit?: boolean
   className?: string
 }) {
   return (
@@ -64,7 +66,13 @@ export function Value({
     >
       {value}
       {unit && (
-        <span className="ml-[0.08em] font-normal text-[0.45em] text-card-muted tracking-normal">
+        <span
+          className="ml-[0.08em] font-normal text-card-muted tracking-normal"
+          style={{
+            fontSize: raisedUnit ? '0.28em' : '0.45em',
+            verticalAlign: raisedUnit ? 'super' : undefined,
+          }}
+        >
           {unit}
         </span>
       )}
@@ -342,6 +350,16 @@ export function Equalizer({ className = 'h-[0.9em]' }: { className?: string }) {
  * the app's own icon set. A name it doesn't know draws a dot rather than failing.
  */
 const WIDGET_ICONS: Record<string, IconName> = {
+  sun: 'sun',
+  moon: 'moon',
+  cloud: 'cloud',
+  'cloud-sun': 'cloud-sun',
+  'cloud-moon': 'cloud-moon',
+  rain: 'rain',
+  snow: 'snow',
+  fog: 'fog',
+  storm: 'storm',
+  calendar: 'calendar',
   activity: 'activity',
   bolt: 'bolt',
   coffee: 'coffee',

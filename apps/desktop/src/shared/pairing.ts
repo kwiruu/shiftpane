@@ -93,6 +93,8 @@ export const IpcChannel = {
   widgetsReload: 'widgets:reload',
   widgetsInstall: 'widgets:install',
   widgetsRemove: 'widgets:remove',
+  widgetsSearchLocations: 'widgets:search-locations',
+  widgetsCancelLocationSearch: 'widgets:cancel-location-search',
   widgetsSetConfig: 'widgets:set-config',
   widgetsSetSecret: 'widgets:set-secret',
   widgetsShare: 'widgets:share',
