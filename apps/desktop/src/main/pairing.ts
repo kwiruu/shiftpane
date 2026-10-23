@@ -79,6 +79,7 @@ export class PairingService extends EventEmitter<{ change: [PairingState] }> {
   #publishRevision = 0
   #running = false
   #refreshing = false
+  #watchingSince = 0
   #diagnostics = {
     pageAt: null as number | null,
     testAt: null as number | null,
@@ -171,7 +172,7 @@ export class PairingService extends EventEmitter<{ change: [PairingState] }> {
       this.#tls = tls
       this.#hosts = hosts
       this.#host = host
-      this.#diagnostics = { pageAt: null, testAt: null, socketAt: null }
+      this.#resetDiagnostics()
       await this.#publish()
     } catch (error) {
       if (this.#running)
@@ -188,14 +189,14 @@ export class PairingService extends EventEmitter<{ change: [PairingState] }> {
   async selectHost(address: string): Promise<void> {
     if (!this.#hosts.some((h) => h.address === address)) return
     this.#host = address
-    this.#diagnostics = { pageAt: null, testAt: null, socketAt: null }
+    this.#resetDiagnostics()
     await this.#publish()
   }
 
   /** Replaces the QR code and the pairing code. Phones already paired stay connected. */
   async newCode(): Promise<void> {
     this.#token = this.#makeToken()
-    this.#diagnostics = { pageAt: null, testAt: null, socketAt: null }
+    this.#resetDiagnostics()
     this.#replaceCode()
     await this.#publish()
   }
@@ -301,6 +302,7 @@ export class PairingService extends EventEmitter<{ change: [PairingState] }> {
       qrSvg,
       connectionTestQrSvg,
       diagnostics: { ...this.#diagnostics },
+      watchingSince: this.#watchingSince,
       host: this.#host,
       hosts: this.#hosts,
       port: this.#server.port,
@@ -313,6 +315,12 @@ export class PairingService extends EventEmitter<{ change: [PairingState] }> {
       phones: this.hub.phones,
       remembered: this.#phones.list,
     })
+  }
+
+  /** Starts a fresh observation window for the current QR code and network. */
+  #resetDiagnostics(): void {
+    this.#diagnostics = { pageAt: null, testAt: null, socketAt: null }
+    this.#watchingSince = this.#now()
   }
 
   #setState(state: PairingState): void {

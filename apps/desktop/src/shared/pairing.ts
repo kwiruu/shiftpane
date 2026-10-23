@@ -53,6 +53,8 @@ export type PairingState =
       /** Token-free test page and request observations for the current network/code. */
       connectionTestQrSvg: string
       diagnostics: { pageAt: number | null; testAt: number | null; socketAt: number | null }
+      /** When those observations began: the last new QR code, network choice or address change. */
+      watchingSince: number
       code: PairingCodeState
       phones: ConnectedPhone[]
       /** Every paired phone, connected or not, most recently seen first. */
