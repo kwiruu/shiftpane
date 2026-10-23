@@ -1,6 +1,6 @@
 {
   "name": "@shiftpane/widget-sdk",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "The widget contract: manifest schema, defineCollector and the collector context",
   "license": "MIT",
   "repository": {

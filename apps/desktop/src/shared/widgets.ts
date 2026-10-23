@@ -118,3 +118,8 @@ export interface StudioWidget {
   recipe: Recipe
   author: string
 }
+
+export type LocationSearchResult = {
+  locations: import('@shiftpane/widget-sdk').WidgetLocation[]
+  problem: string | null
+}

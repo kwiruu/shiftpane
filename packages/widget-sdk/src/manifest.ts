@@ -79,6 +79,7 @@ interface ConfigFieldBase {
 export type ConfigField = ConfigFieldBase &
   (
     | { type: 'string'; default?: string }
+    | { type: 'location' | 'datetime'; default?: never }
     | { type: 'number'; default?: number; min?: number; max?: number }
     | { type: 'boolean'; default?: boolean }
     | { type: 'select'; options: { value: string; label: string }[]; default?: string }
@@ -135,6 +136,8 @@ const ConfigFieldBase = {
 }
 
 export const configFieldSchema: z.ZodType<ConfigField> = z.discriminatedUnion('type', [
+  z.object({ ...ConfigFieldBase, type: z.literal('location') }).strict(),
+  z.object({ ...ConfigFieldBase, type: z.literal('datetime') }).strict(),
   z
     .object({ ...ConfigFieldBase, type: z.literal('string'), default: z.string().optional() })
     .strict(),

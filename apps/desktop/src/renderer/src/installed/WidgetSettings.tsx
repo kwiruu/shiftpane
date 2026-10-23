@@ -6,6 +6,7 @@ import { Button, Chip, Select } from '../shell/parts.tsx'
 import { useAccount } from '../useAccount.ts'
 import { Dialog } from './Dialog.tsx'
 import { PermissionList, SendsOffPc } from './Permissions.tsx'
+import { DatetimeField, LocationField } from './SpecialFields.tsx'
 
 type Values = Record<string, string | number | boolean>
 
@@ -159,7 +160,13 @@ function ConfigForm({ widget }: { widget: InstalledInfo }) {
       <h3 className="section-label mb-3">Settings</h3>
       <div className="flex flex-col gap-3">
         {widget.config.fields.map((field) => (
-          <Field key={field.key} field={field} value={values[field.key]} onChange={set} />
+          <Field
+            key={field.key}
+            widgetId={widget.id}
+            field={field}
+            value={values[field.key]}
+            onChange={set}
+          />
         ))}
       </div>
       <div className="mt-3 flex items-center justify-end gap-3">
@@ -174,10 +181,12 @@ function ConfigForm({ widget }: { widget: InstalledInfo }) {
 }
 
 function Field({
+  widgetId,
   field,
   value,
   onChange,
 }: {
+  widgetId: string
   field: ConfigField
   value: string | number | boolean | undefined
   onChange: (key: string, value: string | number | boolean | undefined) => void
@@ -190,6 +199,24 @@ function Field({
   )
   const help = field.help && <span className="mt-1 block text-ink-muted text-xs">{field.help}</span>
   switch (field.type) {
+    case 'location':
+    case 'datetime':
+      return (
+        <div>
+          {label}
+          {field.type === 'location' ? (
+            <LocationField
+              id={widgetId}
+              value={value}
+              onChange={(next) => onChange(field.key, next)}
+            />
+          ) : (
+            <DatetimeField value={value} onChange={(next) => onChange(field.key, next)} />
+          )}
+          {help}
+        </div>
+      )
+
     case 'string':
       return (
         <label className="block">
