@@ -87,6 +87,9 @@ describe('LAN server', () => {
     expect(page.status).toBe(200)
     expect(page.body).toContain('<title>phone</title>')
     expect(page.headers['content-security-policy']).toContain("default-src 'self'")
+    expect(page.headers['content-security-policy']).toContain(
+      `connect-src 'self' wss://127.0.0.1:${server.port};`,
+    )
     expect(page.headers['cache-control']).toBe('no-cache')
     expect((await get('/assets/app-1.js')).headers['cache-control']).toContain('immutable')
     expect((await get('/../../etc/passwd')).status).toBe(404)

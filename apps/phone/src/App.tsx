@@ -66,8 +66,10 @@ export function App() {
   const pcData = usePcData()
   const status = describeConnection(connection)
   const connected = connection.status === 'connected'
-  const checkingCode = connection.status === 'connecting' && connection.checkingCode === true
-  const disconnected = connection.status === 'rejected' && connection.reason === 'disconnected'
+  const checkingCode = connection.status === 'connecting'
+  const disconnected =
+    connection.status === 'rejected' &&
+    (connection.reason === 'disconnected' || connection.reason === 'connection-failed')
   const virtualAvailable = connected && connection.welcome.features.display
 
   // A duplicated monitor that is no longer there (unplugged) falls back to the virtual one.
@@ -138,7 +140,7 @@ export function App() {
         connected={connected}
       />
 
-      {(connection.status === 'unpaired' || checkingCode || disconnected) && (
+      {connection.status !== 'connected' && (
         <PairScreen
           status={status}
           checking={checkingCode}

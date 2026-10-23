@@ -84,6 +84,21 @@ describe('PcConnection', () => {
   beforeEach(() => vi.useFakeTimers())
   afterEach(() => vi.useRealTimers())
 
+  it('keeps a browser socket rejection in connection state and can retry', () => {
+    const createSocket = vi
+      .fn<NonNullable<PcConnectionOptions['createSocket']>>()
+      .mockImplementationOnce(() => {
+        throw new DOMException('Blocked', 'SecurityError')
+      })
+      .mockReturnValue(new FakeSocket())
+    const { connection } = setup({ createSocket })
+    expect(() => connection.start()).not.toThrow()
+    expect(connection.state).toEqual({ status: 'rejected', reason: 'connection-failed' })
+    connection.reconnect()
+    expect(createSocket).toHaveBeenCalledTimes(2)
+    expect(connection.state.status).toBe('connecting')
+  })
+
   it('sends hello on open and becomes connected on welcome', () => {
     const { connection, open } = setup()
     connection.start()

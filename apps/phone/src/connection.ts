@@ -33,7 +33,7 @@ export type ConnectionState =
   /** Closed for good; the user has to reconnect (or update an app). */
   | {
       status: 'rejected'
-      reason: 'disconnected' | 'protocol-mismatch' | 'bad-hello'
+      reason: 'disconnected' | 'protocol-mismatch' | 'bad-hello' | 'connection-failed'
     }
 
 export interface DeviceInfo {
@@ -200,7 +200,15 @@ export class PcConnection {
       attempt: this.#attempt,
       ...(auth.kind === 'code' && { checkingCode: true as const }),
     })
-    const socket = this.#options.createSocket(this.#options.url)
+    let socket: SocketLike
+    try {
+      socket = this.#options.createSocket(this.#options.url)
+    } catch {
+      // Safari can refuse a socket synchronously (certificate or policy restrictions).
+      // Do not let that exception escape the React effect and unmount the phone UI.
+      this.#set({ status: 'rejected', reason: 'connection-failed' })
+      return
+    }
     this.#socket = socket
     socket.onopen = () => {
       socket.send(
