@@ -23,6 +23,7 @@ type Category = 'Time' | 'PC' | 'Media'
 type Filter = Category | 'All' | 'Installed'
 
 const CATEGORY: Record<WidgetKind, Category> = {
+  time: 'Time',
   clock: 'Time',
   'analog-clock': 'Time',
   calendar: 'Time',

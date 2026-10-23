@@ -41,6 +41,7 @@ export const packageLimits = {
  * widget's data by its id, so a package called `pc-stats` would get the built-in one's.
  */
 export const reservedIds: readonly string[] = [
+  'time',
   'analog-clock',
   'calendar',
   'clock',

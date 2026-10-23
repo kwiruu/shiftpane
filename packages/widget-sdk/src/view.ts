@@ -52,6 +52,8 @@ export type ViewNode =
       /** Whether the number in the middle carries a % sign. */
       unit?: boolean
     }
+  /** Battery object with percent, charging and minutesLeft fields. */
+  | { type: 'battery-gauge'; bind: string }
   | { type: 'meter'; bind: string; segments?: number }
   | { type: 'progress'; bind: string; color?: Accent }
   | {
@@ -63,6 +65,7 @@ export type ViewNode =
       count?: number
     }
   | { type: 'sparkline'; bind: string; color?: Accent }
+  /** Dated daily activity, arranged Sunday–Saturday in at most 54 weeks. */
   | {
       type: 'contribution-calendar'
       bind: string
@@ -221,6 +224,7 @@ export const viewNodeSchema: z.ZodType<ViewNode> = z.lazy(() =>
         segments: z.number().int().min(1).max(40).optional(),
       })
       .strict(),
+    z.object({ type: z.literal('battery-gauge'), bind: Bind }).strict(),
     z.object({ type: z.literal('progress'), bind: Bind, color: AccentSchema.optional() }).strict(),
     z
       .object({

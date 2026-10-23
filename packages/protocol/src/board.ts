@@ -21,6 +21,7 @@ export const MAX_CROP = 320
 
 /** The built-in widgets. Each one is drawn by the phone; some need data from the PC. */
 export const WidgetKind = z.enum([
+  'time',
   'clock',
   'analog-clock',
   'calendar',

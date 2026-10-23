@@ -37,6 +37,13 @@ interface KindInfo {
 }
 
 export const WIDGET_KINDS: Record<WidgetKind, KindInfo> = {
+  time: {
+    name: 'Time',
+    description: 'Focus sessions, timer and stopwatch',
+    pcWidget: null,
+    tone: 'light',
+    columns: 1,
+  },
   'analog-clock': {
     name: 'Analog clock',
     description: 'A round clock face',

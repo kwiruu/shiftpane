@@ -12,6 +12,7 @@ import {
   widgetIcons,
 } from '@shiftpane/widget-sdk'
 import type { CSSProperties } from 'react'
+import { BatteryGauge } from './BatteryGauge.tsx'
 import { ContributionCalendar } from './ContributionCalendar.tsx'
 import {
   Bar,
@@ -108,6 +109,7 @@ const GROWS = new Set<ViewNode['type']>([
   'progress',
   'meter',
   'contribution-calendar',
+  'battery-gauge',
 ])
 
 interface Draw {
@@ -251,6 +253,8 @@ function Node({ node, draw, fill = false }: { node: ViewNode; draw: Draw; fill?:
           unit={node.unit ?? true}
         />
       )
+    case 'battery-gauge':
+      return <BatteryGauge data={resolveBinding(node.bind, context)} />
     case 'meter':
       return (
         <div className="w-full shrink-0" style={{ height: u(0.12) }}>
