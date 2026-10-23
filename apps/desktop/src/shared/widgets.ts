@@ -8,6 +8,7 @@ import type {
   WidgetSize,
   WidgetView,
 } from '@shiftpane/widget-sdk'
+import type { MonitorScale } from './display.ts'
 import type { Recipe } from './studio.ts'
 
 export interface InstalledInfo {
@@ -94,9 +95,15 @@ export interface AppSettings {
   developerMode: boolean
   /** The local model Widget Studio's generator asks, by its Ollama name; null picks one. */
   generatorModel: string | null
+  /** The OS scale of the phone's monitor. */
+  monitorScale: MonitorScale
 }
 
-export const DEFAULT_SETTINGS: AppSettings = { developerMode: false, generatorModel: null }
+export const DEFAULT_SETTINGS: AppSettings = {
+  developerMode: false,
+  generatorModel: null,
+  monitorScale: 'phone',
+}
 
 /** The local models Widget Studio's generator can ask, from Ollama on this PC. */
 export type GeneratorModels =

@@ -13,6 +13,7 @@ import {
   shell,
 } from 'electron'
 import { z } from 'zod'
+import type { MonitorScale } from '../shared/display.ts'
 import {
   type FirewallAllowResult,
   type FirewallState,
@@ -20,7 +21,7 @@ import {
   type SettingsPage,
 } from '../shared/firewall.ts'
 import { IpcChannel } from '../shared/pairing.ts'
-import type { FolderCheck } from '../shared/widgets.ts'
+import { type AppSettings, DEFAULT_SETTINGS, type FolderCheck } from '../shared/widgets.ts'
 import { BoardService, EDITOR } from './board/service.ts'
 import {
   bindDisplayToHub,
@@ -28,6 +29,7 @@ import {
   createHelperHost,
   type DisplayController,
 } from './display/index.ts'
+import { monitorScale } from './display/scale.ts'
 import { FirewallMonitor } from './firewall/monitor.ts'
 import { allowThroughFirewall, queryFirewall } from './firewall/powershell.ts'
 import { installLinkId, installLinkIn, PROTOCOL } from './links.ts'
@@ -499,7 +501,11 @@ app.whenReady().then(() => {
     resourcesPath: process.resourcesPath,
     appPath: app.getAppPath(),
   })
-  display = createDisplayController(helper)
+  // The monitor's scale follows the setting, for each phone's device pixel ratio.
+  let scaleSetting: MonitorScale = DEFAULT_SETTINGS.monitorScale
+  display = createDisplayController(helper, {
+    scaleFor: (ratio) => monitorScale(scaleSetting, ratio),
+  })
   const controller = display
   pairing = new PairingService({
     dataDir: app.getPath('userData'),
@@ -533,6 +539,13 @@ app.whenReady().then(() => {
     open: (url) => void shell.openExternal(url),
   })
   settings = new SettingsService(fileStorage(join(app.getPath('userData'), 'settings.json')))
+  const applyScale = (value: AppSettings) => {
+    if (value.monitorScale === scaleSetting) return
+    scaleSetting = value.monitorScale
+    controller.rescale()
+  }
+  void settings.get().then(applyScale)
+  settings.on('change', applyScale)
   board = new BoardService({
     hub: pairing.hub,
     storage: fileStorage(join(app.getPath('userData'), 'board.json')),

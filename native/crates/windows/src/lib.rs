@@ -195,8 +195,8 @@ impl DisplayBackend for VddBackend {
             capabilities: Capabilities {
                 virtual_display: true,
                 resize: true,
-                // Per-monitor DPI scaling has no documented Win32 API; attach rejects it.
-                scaling: false,
+                // Per-monitor scaling, through the requests Windows' own Settings makes.
+                scaling: true,
                 input_injection: true,
                 window_control: true,
             },

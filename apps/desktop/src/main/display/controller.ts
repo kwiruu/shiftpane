@@ -38,6 +38,11 @@ export interface DisplayControllerOptions {
    * catalogue size, which the phone letterboxes.
    */
   pickSize?: (wanted: MonitorSize) => MonitorSize
+  /**
+   * The OS scale, in percent, to give the monitor for a phone with this device pixel ratio, or
+   * undefined to leave the scale the OS has for it. Sent only when the backend can scale.
+   */
+  scaleFor?: (devicePixelRatio: number) => number | undefined
   /** How long `stop` waits for in-flight work before closing the helper anyway. */
   stopGraceMs?: number
   log?: (message: string) => void
@@ -58,6 +63,8 @@ export interface DisplayControllerEvents {
 interface Want {
   phoneId: string
   size: MonitorSize
+  /** The OS scale in percent; undefined leaves the OS's own. */
+  scale?: number
 }
 
 interface Have extends Want {
@@ -70,6 +77,7 @@ type Job =
   | { kind: 'detach' }
 
 const sameSize = (a: MonitorSize, b: MonitorSize) => a.width === b.width && a.height === b.height
+const sameMonitor = (a: Want, b: Want) => sameSize(a.size, b.size) && a.scale === b.scale
 const keyOf = (size: MonitorSize) => `${size.width}x${size.height}`
 
 /**
@@ -89,12 +97,17 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
   readonly #refreshHz: number
   readonly #sizesFor: NonNullable<DisplayControllerOptions['sizesFor']>
   readonly #pickSize: NonNullable<DisplayControllerOptions['pickSize']>
+  readonly #scaleFor: NonNullable<DisplayControllerOptions['scaleFor']>
   readonly #stopGraceMs: number
   readonly #log: (message: string) => void
 
   #state: DisplayState = { status: 'unknown' }
   #available = false
+  /** Whether the backend can set the monitor's OS scale. */
+  #scaling = false
   readonly #phones = new Set<string>()
+  /** Each paired phone's device pixel ratio, for its monitor's scale. */
+  readonly #ratios = new Map<string, number>()
   #prepares: Array<{ phoneId: string; sizes: DisplaySize[] }> = []
   /** Prepares that did not complete (declined prompt, driver missing), kept for a retry. */
   #unprepared: Array<{ phoneId: string; sizes: DisplaySize[] }> = []
@@ -114,6 +127,7 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
     this.#refreshHz = options.refreshHz ?? 60
     this.#sizesFor = options.sizesFor ?? (() => catalogueSizes())
     this.#pickSize = options.pickSize ?? pickMonitorSize
+    this.#scaleFor = options.scaleFor ?? (() => undefined)
     this.#stopGraceMs = options.stopGraceMs ?? 4_000
     this.#log = options.log ?? (() => {})
     this.#host.on('exit', () => this.#onHelperExit())
@@ -158,12 +172,14 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
   phoneJoined(phone: PairedPhone): void {
     if (this.#stopped) return
     this.#phones.add(phone.id)
+    this.#ratios.set(phone.id, phone.devicePixelRatio)
     const sizes = this.#sizesFor(phone.viewport, phone.devicePixelRatio)
     if (this.#queuePrepare(phone.id, sizes)) void this.#pump()
   }
 
   phoneLeft(phoneId: string): void {
     this.#phones.delete(phoneId)
+    this.#ratios.delete(phoneId)
     this.#prepares = this.#prepares.filter((job) => job.phoneId !== phoneId)
     this.#unprepared = this.#unprepared.filter((job) => job.phoneId !== phoneId)
     if (this.#desired?.phoneId === phoneId) {
@@ -187,15 +203,28 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
     if (this.#stopped || !this.#phones.has(phoneId)) return
     const wanted = this.#pickSize({ width: size.width, height: size.height })
     if (screen) {
+      this.#ratios.set(phoneId, screen.devicePixelRatio)
       const sizes = this.#sizesFor(screen.viewport, screen.devicePixelRatio)
       this.#queuePrepare(phoneId, [wanted, ...sizes])
     }
     const previous = this.#desired
-    this.#desired = { phoneId, size: { width: wanted.width, height: wanted.height } }
+    this.#desired = {
+      phoneId,
+      size: { width: wanted.width, height: wanted.height },
+      scale: this.#scaleOf(phoneId),
+    }
     this.#blocked = false
     if (previous && previous.phoneId !== phoneId) {
       this.emit('preempted', { phoneId: previous.phoneId, by: phoneId })
     }
+    void this.#pump()
+  }
+
+  /** The scale setting changed: the monitor takes the new scale now, if one is up. */
+  rescale(): void {
+    if (this.#stopped || !this.#desired) return
+    this.#desired = { ...this.#desired, scale: this.#scaleOf(this.#desired.phoneId) }
+    this.#blocked = false
     void this.#pump()
   }
 
@@ -287,7 +316,7 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
     const want = this.#desired
     const have = this.#applied
     if (want) {
-      if (have && sameSize(have.size, want.size)) {
+      if (have && sameMonitor(have, want)) {
         // The right size is already there; only the owner changes.
         if (have.phoneId !== want.phoneId) {
           this.#applied = { ...have, phoneId: want.phoneId }
@@ -356,6 +385,7 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
         width: want.size.width,
         height: want.size.height,
         refreshHz: this.#refreshHz,
+        ...(want.scale === undefined ? {} : { scalePercent: want.scale }),
       })
       const previous = this.#applied
       this.#applied = { ...want, display: result.display }
@@ -398,10 +428,17 @@ export class DisplayController extends EventEmitter<DisplayControllerEvents> {
     }
   }
 
+  /** The scale for this phone's monitor, when the backend can set one. */
+  #scaleOf(phoneId: string): number | undefined {
+    const ratio = this.#ratios.get(phoneId)
+    return this.#scaling && ratio !== undefined ? this.#scaleFor(ratio) : undefined
+  }
+
   /** Records whether the backend is ready; when it is not, shows why. */
   async #readBackend(channel: HelperSession['channel']): Promise<boolean> {
     const { backend } = await channel.call('helper.hello')
     this.#available = backend.ready && backend.capabilities.virtualDisplay
+    this.#scaling = backend.capabilities.scaling
     if (this.#available) return true
     // A driver that was removed and put back starts from its default sizes.
     this.#prepared.clear()

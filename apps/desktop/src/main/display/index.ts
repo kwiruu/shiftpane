@@ -1,6 +1,6 @@
 import { statSync } from 'node:fs'
 import { HELPER_PROTOCOL_VERSION } from '@shiftpane/helper-client'
-import { DisplayController } from './controller.ts'
+import { DisplayController, type DisplayControllerOptions } from './controller.ts'
 import { HelperHost } from './helper-host.ts'
 import { openHelperProcess } from './helper-process.ts'
 import { locateHelper } from './locate.ts'
@@ -46,9 +46,9 @@ export function createHelperHost(options: DisplayServiceOptions): HelperHost {
 /** The virtual-monitor controller, on the shared helper. */
 export function createDisplayController(
   host: HelperHost,
-  log: (message: string) => void = defaultLog,
+  options: Pick<DisplayControllerOptions, 'scaleFor' | 'log'> = {},
 ): DisplayController {
-  return new DisplayController({ host, log })
+  return new DisplayController({ host, log: defaultLog, ...options })
 }
 
 export type { DisplayController } from './controller.ts'
