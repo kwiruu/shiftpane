@@ -18,6 +18,7 @@ extraResources:
   - from: ../phone/dist
     to: phone
     filter: ['**/*']
+afterPack: scripts/validate-package.cjs
 artifactName: ${productName}-${version}-${os}-${arch}.${ext}
 # The site's Install buttons open shiftpane://install/<widget id>.
 protocols:
