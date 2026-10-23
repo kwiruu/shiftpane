@@ -9,8 +9,11 @@ import {
   viewFor,
   type WidgetSize,
   type WidgetView,
+  widgetIcons,
 } from '@shiftpane/widget-sdk'
 import type { CSSProperties } from 'react'
+import { BatteryGauge } from './BatteryGauge.tsx'
+import { ContributionCalendar } from './ContributionCalendar.tsx'
 import {
   Bar,
   Cover,
@@ -105,6 +108,8 @@ const GROWS = new Set<ViewNode['type']>([
   'text',
   'progress',
   'meter',
+  'contribution-calendar',
+  'battery-gauge',
 ])
 
 interface Draw {
@@ -164,10 +169,32 @@ function Node({ node, draw, fill = false }: { node: ViewNode; draw: Draw; fill?:
             ALIGN[node.align ?? 'start']
           } ${fill ? 'relative min-h-0 flex-1' : ''}`}
           style={{
+            ...(node.surface
+              ? ({
+                  position: 'relative',
+                  isolation: 'isolate',
+                  '--card-ink': '#ffffff',
+                  '--card-muted': 'rgba(255,255,255,0.65)',
+                } as CSSProperties)
+              : {}),
             gap: u(0.03 * (node.gap ?? 2)),
             ...(node.type === 'row' && node.inset ? { paddingInline: fluid(4, 8, 48) } : {}),
           }}
         >
+          {node.surface && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute"
+              style={{
+                inset: '-20cqmin',
+                zIndex: -1,
+                background:
+                  node.surface === 'blue'
+                    ? 'radial-gradient(ellipse at 65% 12%, rgba(135,150,185,0.18), transparent 42%), linear-gradient(155deg, #28334f 8%, #123c73 58%, #07519b 100%)'
+                    : 'radial-gradient(ellipse at 70% 12%, rgba(224,165,197,0.18), transparent 45%), linear-gradient(155deg, #392e50 8%, #664576 58%, #985e83 100%)',
+              }}
+            />
+          )}
           {node.children.map((child, index) => (
             <Child key={index} node={child} draw={draw} inRow={node.type === 'row'} />
           ))}
@@ -206,8 +233,14 @@ function Node({ node, draw, fill = false }: { node: ViewNode; draw: Draw; fill?:
       const { value, unit } = formatValue(
         resolveBinding(node.bind, context),
         node.format,
-        node.unit,
+        node.unit ? interpolate(node.unit, context) : undefined,
       )
+      if (node.size === 'hero') {
+        // Leave room for the unit and fit long countdowns or their completed message.
+        const length = Math.max(2, value.length)
+        const size = `min(${fluid(40, 44, 180)}, calc(76cqw / ${length * 0.68 + (unit ? 0.55 : 0)}))`
+        return <Value value={value} unit={unit} size={size} raisedUnit />
+      }
       return <Value value={value} unit={unit} size={VALUE_SIZES[node.size ?? 'md']} />
     }
     case 'ring':
@@ -220,6 +253,8 @@ function Node({ node, draw, fill = false }: { node: ViewNode; draw: Draw; fill?:
           unit={node.unit ?? true}
         />
       )
+    case 'battery-gauge':
+      return <BatteryGauge data={resolveBinding(node.bind, context)} />
     case 'meter':
       return (
         <div className="w-full shrink-0" style={{ height: u(0.12) }}>
@@ -261,12 +296,27 @@ function Node({ node, draw, fill = false }: { node: ViewNode; draw: Draw; fill?:
           />
         </div>
       )
+    case 'contribution-calendar':
+      return (
+        <ContributionCalendar
+          data={resolveBinding(node.bind, context)}
+          weeks={node.weeks}
+          split={node.split}
+          monthOnly={node.monthOnly}
+          boxesOnly={node.boxesOnly}
+        />
+      )
     case 'list':
       return <List items={resolveBinding(node.bind, context)} max={node.max} />
-    case 'icon':
+    case 'icon': {
+      const bound = node.bind ? resolveBinding(node.bind, context) : undefined
+      const name =
+        typeof bound === 'string' && (widgetIcons as readonly string[]).includes(bound)
+          ? bound
+          : node.name
       return (
         <WidgetIcon
-          name={node.name}
+          name={name}
           style={{
             width: u(0.17),
             height: u(0.17),
@@ -274,6 +324,7 @@ function Node({ node, draw, fill = false }: { node: ViewNode; draw: Draw; fill?:
           }}
         />
       )
+    }
     case 'button': {
       const allowed = draw.actions.has(node.action) && draw.onAction !== undefined
       const primary = node.action === 'media.play-pause'

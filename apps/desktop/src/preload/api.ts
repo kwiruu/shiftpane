@@ -83,6 +83,11 @@ export interface ShiftPaneApi {
     install(token: string): Promise<InstallResult>
     remove(id: string): Promise<void>
     /** Sets a widget's config; resolves with what was wrong, empty when it was set. */
+    searchLocations(
+      id: string,
+      query: string,
+    ): Promise<import('../shared/widgets.ts').LocationSearchResult>
+    cancelLocationSearch(id: string): Promise<void>
     setConfig(id: string, values: Record<string, unknown>): Promise<string[]>
     /** Sets one of a widget's secrets, or clears it with null; resolves with why it couldn't. */
     setSecret(id: string, name: string, value: string | null): Promise<string | null>

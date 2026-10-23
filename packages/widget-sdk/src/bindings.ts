@@ -75,6 +75,8 @@ export function placeholderConfigKeys(text: string): string[] {
 /** The text a node shows that can hold placeholders: its label, caption or words. */
 export function textsOf(node: ViewNode): string[] {
   switch (node.type) {
+    case 'value':
+      return node.unit ? [node.unit] : []
     case 'label':
       return [node.text]
     case 'text':
@@ -91,9 +93,9 @@ export function textsOf(node: ViewNode): string[] {
 /** Each config field's default, as the app fills them in before the first run. */
 export function configDefaults(fields: ConfigField[]): Record<string, unknown> {
   return Object.fromEntries(
-    fields
-      .filter((field) => field.default !== undefined)
-      .map((field) => [field.key, field.default]),
+    fields.flatMap((field) =>
+      'default' in field && field.default !== undefined ? [[field.key, field.default]] : [],
+    ),
   )
 }
 

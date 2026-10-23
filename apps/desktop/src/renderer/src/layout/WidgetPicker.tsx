@@ -167,6 +167,7 @@ export function WidgetPicker({
                 >
                   <WidgetCard
                     widget={choice.card}
+                    preview
                     radius={14}
                     data={data}
                     connected
@@ -204,6 +205,7 @@ export function WidgetPicker({
           >
             <WidgetCard
               widget={ghost.card}
+              preview
               radius={14}
               data={data}
               connected

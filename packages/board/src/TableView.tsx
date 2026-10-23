@@ -146,6 +146,8 @@ export function TableView(props: TableViewProps) {
             >
               <div className={editing ? 'pointer-events-none size-full' : 'size-full'}>
                 <WidgetCard
+                  instanceId={widget.id}
+                  preview={!!editing}
                   widget={widget}
                   radius={radius}
                   data={data}

@@ -218,7 +218,7 @@ export class InstalledWidgets extends EventEmitter<{
         intervalMs:
           declared.length > 0 ? 2000 : entry.widget.collector !== undefined ? 5000 : 60_000,
         onlyOnChange: true,
-        collect: () => this.#collect(entry),
+        collect: (force) => this.#collect(entry, force),
       }
       this.#collectors.set(entry.id, { entry, collector })
       result[entry.id] = collector
@@ -236,7 +236,7 @@ export class InstalledWidgets extends EventEmitter<{
     return state
   }
 
-  async #collect(entry: InstalledEntry): Promise<InstalledWidgetData> {
+  async #collect(entry: InstalledEntry, force = false): Promise<InstalledWidgetData> {
     const { manifest, collector } = entry.widget
     const sources = await this.#options.sources.read(manifest.permissions.sources)
     const config = effectiveConfig(entry)
@@ -263,7 +263,9 @@ export class InstalledWidgets extends EventEmitter<{
 
     const state = this.#run(entry.id)
     const due =
-      state.lastRunAt === null || this.#now() - state.lastRunAt >= refreshSeconds(entry) * 1000
+      force ||
+      state.lastRunAt === null ||
+      this.#now() - state.lastRunAt >= refreshSeconds(entry) * 1000
     if (due && !state.running) {
       const sandboxSources = sources as Record<string, unknown>
       state.running = this.#enqueue(() => this.#runCollector(entry, sandboxSources, config)).then(
@@ -281,8 +283,8 @@ export class InstalledWidgets extends EventEmitter<{
         },
       )
     }
-    // The first run is waited for, so a phone doesn't sit on "waiting" for a whole interval.
-    if (state.output === null && state.running) await state.running
+    // Send a due reading as soon as it is ready, including reconnects and minute countdowns.
+    if (state.running) await state.running
     return data(state.output, state.output === null ? state.problem : null)
   }
 

@@ -182,6 +182,31 @@ describe('WidgetService', () => {
     t.service.stop()
   })
 
+  it('retains the last good calendar when a later refresh fails', async () => {
+    let fail = false
+    const calendar = { days: [{ date: '2026-10-23', count: 4, level: 2 }] }
+    const t = setup({
+      'github-contributions': {
+        intervalMs: 1000,
+        collect: async () => {
+          if (fail) throw new Error('GitHub is unavailable')
+          return calendar
+        },
+      },
+    })
+    t.subscribe('a', ['github-contributions'])
+    await flush()
+    expect(t.sent).toHaveLength(1)
+    fail = true
+    await vi.advanceTimersByTimeAsync(1000)
+    expect(t.sent).toHaveLength(1)
+    t.subscribe('b', ['github-contributions'])
+    await flush()
+    const last = t.sent.at(-1)?.message
+    expect(last?.type === 'widget.update' && last.data).toEqual(calendar)
+    t.service.stop()
+  })
+
   it('starts a widget a phone already shows once it gets a collector', async () => {
     const t = setup({})
     t.subscribe('a', ['gpu-ring'])

@@ -7,6 +7,7 @@ import type { PcData } from './data.ts'
 import { MediaWidget } from './Media.tsx'
 import { CpuWidget, MemoryWidget, NetworkWidget, PcStatsWidget } from './PcStats.tsx'
 import { fluid, Waiting } from './parts.tsx'
+import { TimeWidget } from './TimeWidget.tsx'
 import { type ElementSize, useElementSize } from './useElementSize.ts'
 import { sizeForBox, ViewWidget } from './ViewWidget.tsx'
 
@@ -38,6 +39,8 @@ export type CardWidget =
   | { kind: 'installed'; widget: string; tone: Tone }
 
 export interface WidgetCardProps {
+  instanceId?: string
+  preview?: boolean
   widget: CardWidget
   radius: number
   data: PcData
@@ -58,6 +61,8 @@ export function WidgetCard({
   connected,
   onMediaAction,
   onWidgetAction,
+  instanceId,
+  preview = false,
 }: WidgetCardProps) {
   const ref = useRef<HTMLDivElement>(null)
   const box = useElementSize(ref)
@@ -65,6 +70,15 @@ export function WidgetCard({
 
   const content = () => {
     switch (widget.kind) {
+      case 'time':
+        return (
+          <TimeWidget
+            key={instanceId ?? 'preview'}
+            id={instanceId}
+            preview={preview || !instanceId}
+            box={box}
+          />
+        )
       case 'analog-clock':
         return <AnalogClockWidget box={box} />
       case 'clock':
