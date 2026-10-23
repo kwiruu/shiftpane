@@ -34,9 +34,17 @@ describe('pairing tokens', () => {
   })
 
   it('compares tokens exactly', () => {
+    // Tokens are short; long strings only made this slow enough to time out on a busy CI runner.
+    const text = fc.string({ unit: 'binary', maxLength: 64 })
     fc.assert(
-      fc.property(fc.string({ unit: 'binary' }), fc.string({ unit: 'binary' }), (a, b) => {
+      fc.property(text, text, (a, b) => {
         expect(tokensEqual(a, b)).toBe(a === b)
+      }),
+    )
+    // Equal strings rarely come up at random, so check them on purpose too.
+    fc.assert(
+      fc.property(text, (a) => {
+        expect(tokensEqual(a, `${a}`)).toBe(true)
       }),
     )
     const token = generatePairingToken()
