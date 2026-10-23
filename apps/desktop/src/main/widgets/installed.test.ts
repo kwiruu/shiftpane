@@ -146,6 +146,35 @@ async function install(t: ReturnType<typeof setup>, path: string) {
 }
 
 describe('checking a folder', () => {
+  it('installs a battery gauge on 0.7.0 and refuses it on 0.6.0', async () => {
+    const path = await folder('battery', {
+      ...gpuRing,
+      manifest: {
+        ...gpuRing.manifest,
+        id: 'laptop-battery',
+        minAppVersion: '0.7.0',
+        permissions: { sources: ['battery'] },
+      },
+      view: { small: { type: 'battery-gauge', bind: '@battery' } },
+      sample: {},
+    })
+    const old = setup({ appVersion: '0.6.0' })
+    const compatible = setup({ appVersion: '0.7.0' })
+    try {
+      await old.widgets.start()
+      expect(await old.widgets.check(path)).toMatchObject({
+        status: 'invalid',
+        problems: ['It needs ShiftPane 0.7.0 or later; this is 0.6.0.'],
+      })
+      await compatible.widgets.start()
+      await install(compatible, path)
+      expect(compatible.widgets.list()[0]?.id).toBe('laptop-battery')
+    } finally {
+      old.widgets.stop()
+      compatible.widgets.stop()
+    }
+  })
+
   it('installs a contribution calendar on 0.6.0 and refuses it on 0.5.0', async () => {
     const path = await folder('contributions', {
       ...gpuRing,

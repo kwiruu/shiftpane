@@ -15,7 +15,7 @@ it('accepts a battery object binding and requires its permission', () => {
     author: 'shiftpane',
     license: 'MIT',
     categories: ['system'],
-    minAppVersion: '0.6.0',
+    minAppVersion: '0.7.0',
     sizes: ['small', 'medium'],
     permissions: { sources: ['battery'], actions: [], local: [], network: [], secrets: [] },
     config: [],

@@ -219,7 +219,7 @@ function Node({ node, draw, fill = false }: { node: ViewNode; draw: Draw; fill?:
     case 'text': {
       const raw = node.bind ? resolveBinding(node.bind, context) : node.text
       const text =
-        typeof raw === 'string' ? interpolate(raw, context) : raw == null ? 'â€”' : String(raw)
+        typeof raw === 'string' ? interpolate(raw, context) : raw == null ? '—' : String(raw)
       return (
         <p
           className={`truncate leading-tight ${node.muted ? 'text-card-muted' : 'font-semibold'}`}
