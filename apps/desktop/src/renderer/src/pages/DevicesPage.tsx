@@ -1,5 +1,6 @@
 import { MAX_PHONES } from '@shiftpane/protocol'
 import { Icon } from '@shiftpane/ui/icons'
+import { useEffect, useState } from 'react'
 import type { DisplayState } from '../../../shared/display.ts'
 import type { FirewallState } from '../../../shared/firewall.ts'
 import type {
@@ -12,6 +13,7 @@ import { DisplayNotice } from '../DisplayNotice.tsx'
 import { FirewallNotice } from '../FirewallNotice.tsx'
 import { Button, Card, Chip, Dot, type DotTone, Glyph, Select } from '../shell/parts.tsx'
 import { splitName } from '../splits.ts'
+import { showSilenceHint } from './reachability.ts'
 
 /** The phone's screen in physical pixels, as it is now (or as it was when it paired). */
 function screenPixels(phone: ConnectedPhone): string {
@@ -119,7 +121,36 @@ function TypedCode({ code }: { code: PairingCodeState }) {
   )
 }
 
+/** Re-reads the clock every few seconds so a hint can appear without any other change. */
+function useNow(intervalMs = 5_000): number {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), intervalMs)
+    return () => clearInterval(timer)
+  }, [intervalMs])
+  return now
+}
+
+/** Shown when a QR code has sat unanswered: the likeliest cause on home Wi-Fi is the router. */
+function SilenceHint() {
+  return (
+    <div
+      role="status"
+      className="mb-4 rounded-xl border border-border bg-surface p-4 text-sm text-ink-soft"
+    >
+      <p className="font-medium text-ink">Nothing from your phone has reached this PC yet</p>
+      <p className="mt-1.5">
+        If you have scanned the code, your router may be stopping Wi-Fi devices from talking to each
+        other (called AP or client isolation, and always on for guest networks). Turn that off in
+        the router's settings, or turn on your phone's Personal Hotspot and connect this PC to it.
+        The QR code updates on its own.
+      </p>
+    </div>
+  )
+}
+
 function PairCard({ state, firewall }: { state: PairingState; firewall: FirewallState }) {
+  const now = useNow()
   if (state.status !== 'ready') {
     return (
       <Card
@@ -138,6 +169,7 @@ function PairCard({ state, firewall }: { state: PairingState; firewall: Firewall
   }
 
   const origin = `https://${state.host}:${state.port}`
+  const silent = showSilenceHint(state, now)
   const steps = [
     'Join a Wi-Fi network that allows devices to communicate.',
     "Scan the QR code with the phone's camera.",
@@ -163,6 +195,7 @@ function PairCard({ state, firewall }: { state: PairingState; firewall: Firewall
           <FirewallNotice key={firewall.reason} state={firewall} />
         </div>
       )}
+      {silent && <SilenceHint />}
       <div className="my-auto flex shrink-0 flex-col items-center gap-6 py-3">
         <div className="hatched rounded-[1.375rem] border border-border bg-surface p-2">
           <img
