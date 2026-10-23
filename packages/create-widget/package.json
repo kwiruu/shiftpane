@@ -1,6 +1,6 @@
 {
   "name": "create-shiftpane-widget",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Start a ShiftPane widget: npm create shiftpane-widget",
   "license": "MIT",
   "repository": {

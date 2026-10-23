@@ -8,6 +8,8 @@ import type {
   WidgetSize,
   WidgetView,
 } from '@shiftpane/widget-sdk'
+import type { MonitorScale } from './display.ts'
+import type { Recipe } from './studio.ts'
 
 export interface InstalledInfo {
   id: string
@@ -91,6 +93,28 @@ export type ShareResult =
 export interface AppSettings {
   /** Shows the tools for making widgets, such as loading one from a folder. */
   developerMode: boolean
+  /** The local model Widget Studio's generator asks, by its Ollama name; null picks one. */
+  generatorModel: string | null
+  /** The OS scale of the phone's monitor. */
+  monitorScale: MonitorScale
 }
 
-export const DEFAULT_SETTINGS: AppSettings = { developerMode: false }
+export const DEFAULT_SETTINGS: AppSettings = {
+  developerMode: false,
+  generatorModel: null,
+  monitorScale: 'phone',
+}
+
+/** The local models Widget Studio's generator can ask, from Ollama on this PC. */
+export type GeneratorModels =
+  | { ok: true; models: string[]; preferred: string | null }
+  | { ok: false; problem: string }
+
+export type GeneratorResult = { ok: true; recipe: Recipe } | { ok: false; problem: string }
+
+/** A widget Studio made, to edit again: its recipe and the author it was saved with. */
+export interface StudioWidget {
+  id: string
+  recipe: Recipe
+  author: string
+}

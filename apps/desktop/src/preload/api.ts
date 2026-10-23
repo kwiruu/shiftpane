@@ -3,13 +3,17 @@ import type { CaptureEvent } from '../shared/capture.ts'
 import type { DisplayState } from '../shared/display.ts'
 import type { FirewallAllowResult, FirewallState, SettingsPage } from '../shared/firewall.ts'
 import type { PairingState } from '../shared/pairing.ts'
+import type { Recipe } from '../shared/studio.ts'
 import type {
   AccountState,
   AppSettings,
   FolderCheck,
+  GeneratorModels,
+  GeneratorResult,
   InstalledInfo,
   InstallResult,
   ShareResult,
+  StudioWidget,
 } from '../shared/widgets.ts'
 
 /** The only surface the renderer gets: exposed as `window.shiftpane` by the preload script. */
@@ -93,6 +97,25 @@ export interface ShiftPaneApi {
     onOpen(listener: (id: string) => void): () => void
     /** The install link the app was started with, once. */
     takeOpen(): Promise<string | null>
+  }
+  /** Widget Studio: widgets made without code, from a recipe. */
+  studio: {
+    /** The widget Studio made with this id, to edit again; null for any other. */
+    get(id: string): Promise<StudioWidget | null>
+    /** The ids of the widgets Studio made. */
+    ids(): Promise<string[]>
+    /**
+     * Writes the widget and checks it for the install prompt. With `id`, saves over that Studio
+     * widget; `author` is the GitHub login for its manifest.
+     */
+    save(recipe: Recipe, id: string | null, author: string): Promise<FolderCheck>
+  }
+  /** Studio's generator: a sentence to a recipe, from an open-weights model in Ollama on this PC. */
+  generator: {
+    models(): Promise<GeneratorModels>
+    /** Resolves with the recipe, or why there isn't one; one at a time. */
+    run(prompt: string, model: string): Promise<GeneratorResult>
+    cancel(): Promise<void>
   }
   /** Signing in to the marketplace to share widgets, with a code typed on github.com. */
   account: {

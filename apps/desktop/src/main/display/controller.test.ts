@@ -64,6 +64,7 @@ function setup(
   responder: Responder = () => undefined,
   sizesFor: NonNullable<DisplayControllerOptions['sizesFor']> = () => SIZES,
   pickSize: NonNullable<DisplayControllerOptions['pickSize']> = exactly,
+  extra: Partial<DisplayControllerOptions> = {},
 ) {
   const calls: Recorded[] = []
   const exitListeners: Array<() => void> = []
@@ -121,7 +122,7 @@ function setup(
     },
   }
 
-  const controller = new DisplayController({ host, sizesFor, pickSize, stopGraceMs: 50 })
+  const controller = new DisplayController({ host, sizesFor, pickSize, stopGraceMs: 50, ...extra })
   const states: DisplayState[] = []
   controller.on('change', (state) => states.push(state))
   const events: string[] = []
@@ -265,6 +266,59 @@ describe('DisplayController: following the phone', () => {
     await settled(controller, 'attached')
     const attach = calls.find((c) => c.method === 'display.attach')
     expect(attach?.params).toEqual({ width: 1440, height: 1080, refreshHz: 60 })
+  })
+
+  describe('scale', () => {
+    const scaling: Responder = ({ method }) =>
+      method === 'helper.hello'
+        ? {
+            type: 'hello',
+            ...readyHello({
+              capabilities: { ...readyHello().backend.capabilities, scaling: true },
+            }),
+          }
+        : undefined
+    const attachParams = (calls: Recorded[]) =>
+      calls.filter((c) => c.method === 'display.attach').map((c) => c.params)
+
+    it('asks for the scale the setting gives the phone, when the backend can scale', async () => {
+      let percent: number | undefined = 300
+      const { controller, calls } = setup(scaling, undefined, undefined, {
+        scaleFor: (ratio) => (percent === undefined ? undefined : percent + ratio),
+      })
+      await controller.start()
+      controller.phoneJoined(phone('a'))
+      controller.streamRequested('a', { width: 1440, height: 1080 })
+      await settled(controller, 'attached')
+      // The phone's ratio is 3.
+      expect(attachParams(calls)).toEqual([
+        { width: 1440, height: 1080, refreshHz: 60, scalePercent: 303 },
+      ])
+
+      // A new setting re-applies at the same size; the same one again does nothing.
+      percent = 200
+      controller.rescale()
+      await vi.waitFor(() => expect(attachParams(calls)).toHaveLength(2))
+      expect(attachParams(calls)[1]).toMatchObject({ width: 1440, height: 1080, scalePercent: 203 })
+      controller.rescale()
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(attachParams(calls)).toHaveLength(2)
+
+      // Leaving it to the OS sends no scale.
+      percent = undefined
+      controller.rescale()
+      await vi.waitFor(() => expect(attachParams(calls)).toHaveLength(3))
+      expect(attachParams(calls)[2]).toEqual({ width: 1440, height: 1080, refreshHz: 60 })
+    })
+
+    it('sends no scale to a backend that cannot scale', async () => {
+      const { controller, calls } = setup(undefined, undefined, undefined, { scaleFor: () => 200 })
+      await controller.start()
+      controller.phoneJoined(phone('a'))
+      controller.streamRequested('a', { width: 1440, height: 1080 })
+      await settled(controller, 'attached')
+      expect(attachParams(calls)).toEqual([{ width: 1440, height: 1080, refreshHz: 60 }])
+    })
   })
 
   it('does not call the helper again for the size it already has', async () => {

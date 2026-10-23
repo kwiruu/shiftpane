@@ -13,6 +13,7 @@ import {
   shell,
 } from 'electron'
 import { z } from 'zod'
+import type { MonitorScale } from '../shared/display.ts'
 import {
   type FirewallAllowResult,
   type FirewallState,
@@ -20,7 +21,7 @@ import {
   type SettingsPage,
 } from '../shared/firewall.ts'
 import { IpcChannel } from '../shared/pairing.ts'
-import type { FolderCheck } from '../shared/widgets.ts'
+import { type AppSettings, DEFAULT_SETTINGS, type FolderCheck } from '../shared/widgets.ts'
 import { BoardService, EDITOR } from './board/service.ts'
 import {
   bindDisplayToHub,
@@ -28,6 +29,7 @@ import {
   createHelperHost,
   type DisplayController,
 } from './display/index.ts'
+import { monitorScale } from './display/scale.ts'
 import { FirewallMonitor } from './firewall/monitor.ts'
 import { allowThroughFirewall, queryFirewall } from './firewall/powershell.ts'
 import { installLinkId, installLinkIn, PROTOCOL } from './links.ts'
@@ -283,7 +285,7 @@ const NOT_DEVELOPER: FolderCheck = {
  * widget was loaded from.
  */
 function registerWidgetIpc(widgetsService: Widgets, appSettings: SettingsService): void {
-  const { installed, marketplace, account, folders } = widgetsService
+  const { installed, marketplace, account, folders, studio, generator } = widgetsService
   const developer = async () => (await appSettings.get()).developerMode
   // Folder widgets reload on save while Developer mode is on.
   void appSettings.get().then((value) => folders.setEnabled(value.developerMode))
@@ -302,6 +304,32 @@ function registerWidgetIpc(widgetsService: Widgets, appSettings: SettingsService
     const id = pendingInstall
     pendingInstall = null
     return id
+  })
+  // Widget Studio: the window sends a recipe, never a path; Studio picks the folder.
+  ipcMain.handle(IpcChannel.studioGet, (event, id: unknown) => {
+    const parsed = WidgetId.safeParse(id)
+    return fromMainWindow(event) && parsed.success ? studio.get(parsed.data) : null
+  })
+  ipcMain.handle(IpcChannel.studioIds, (event) => (fromMainWindow(event) ? studio.ids() : []))
+  ipcMain.handle(
+    IpcChannel.studioSave,
+    (event, recipe: unknown, id: unknown, author: unknown): Promise<FolderCheck> | FolderCheck => {
+      if (!fromMainWindow(event)) return { status: 'canceled' }
+      const target = WidgetId.safeParse(id)
+      return studio.save(recipe, target.success ? target.data : null, author)
+    },
+  )
+  ipcMain.handle(IpcChannel.generatorModels, (event) =>
+    fromMainWindow(event) ? generator.models() : { ok: false, problem: '' },
+  )
+  ipcMain.handle(IpcChannel.generatorRun, (event, prompt: unknown, model: unknown) => {
+    if (!fromMainWindow(event) || typeof prompt !== 'string' || typeof model !== 'string') {
+      return { ok: false, problem: 'Nothing to make.' }
+    }
+    return generator.generate(prompt, model)
+  })
+  ipcMain.handle(IpcChannel.generatorCancel, (event) => {
+    if (fromMainWindow(event)) generator.cancel()
   })
   ipcMain.handle(IpcChannel.accountGet, (event) => (fromMainWindow(event) ? account.state : null))
   ipcMain.handle(IpcChannel.accountSignIn, (event) =>
@@ -473,7 +501,11 @@ app.whenReady().then(() => {
     resourcesPath: process.resourcesPath,
     appPath: app.getAppPath(),
   })
-  display = createDisplayController(helper)
+  // The monitor's scale follows the setting, for each phone's device pixel ratio.
+  let scaleSetting: MonitorScale = DEFAULT_SETTINGS.monitorScale
+  display = createDisplayController(helper, {
+    scaleFor: (ratio) => monitorScale(scaleSetting, ratio),
+  })
   const controller = display
   pairing = new PairingService({
     dataDir: app.getPath('userData'),
@@ -497,6 +529,7 @@ app.whenReady().then(() => {
     hub: pairing.hub,
     helper: async () => (await helper.session()).channel,
     dataDir: app.getPath('userData'),
+    studioDir: join(app.getPath('documents'), 'ShiftPane widgets'),
     appVersion: app.getVersion(),
     cipher: {
       available: () => safeStorage.isEncryptionAvailable(),
@@ -506,6 +539,13 @@ app.whenReady().then(() => {
     open: (url) => void shell.openExternal(url),
   })
   settings = new SettingsService(fileStorage(join(app.getPath('userData'), 'settings.json')))
+  const applyScale = (value: AppSettings) => {
+    if (value.monitorScale === scaleSetting) return
+    scaleSetting = value.monitorScale
+    controller.rescale()
+  }
+  void settings.get().then(applyScale)
+  settings.on('change', applyScale)
   board = new BoardService({
     hub: pairing.hub,
     storage: fileStorage(join(app.getPath('userData'), 'board.json')),

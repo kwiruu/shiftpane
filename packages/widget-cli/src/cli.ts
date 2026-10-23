@@ -3,12 +3,22 @@ import { writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { checkFolder, type FolderReport, packFolder } from '@shiftpane/widget-runtime'
-import { describePermissions } from '@shiftpane/widget-sdk'
+import { describePermissions, MARKETPLACE_URL } from '@shiftpane/widget-sdk'
+import {
+  credentialsPath,
+  deviceSignIn,
+  marketplaceApi,
+  readCredentials,
+  removeCredentials,
+  tokenFor,
+  upload,
+  writeCredentials,
+} from './account.ts'
 import { configFromArgs, runOnce } from './dev.ts'
 
-const VERSION = '0.5.0'
+const VERSION = '0.5.1'
 
-const HELP = `shiftpane-widget ${VERSION}: check, run and pack ShiftPane widgets
+const HELP = `shiftpane-widget ${VERSION}: check, run, pack and publish ShiftPane widgets
 
   shiftpane-widget validate [folder]   every check the marketplace runs that can run here
   shiftpane-widget dev [folder]        run the collector on the sample PC, again on every save
@@ -16,6 +26,14 @@ const HELP = `shiftpane-widget ${VERSION}: check, run and pack ShiftPane widgets
       --once                           run once and stop
   shiftpane-widget pack [folder]       make the zip the marketplace takes: <id>-<version>.zip
       --out <file>                     where to write it
+  shiftpane-widget login               sign in to the marketplace with GitHub (a code to type)
+      --print-token                    print the token instead of keeping it, for a CI secret
+  shiftpane-widget publish [folder]    check, pack and upload it for review
+      --notes <text>                   what changed, for the reviewer
+  shiftpane-widget whoami              who the marketplace thinks you are
+  shiftpane-widget logout              sign out, ending the token
+
+publish uses SHIFTPANE_TOKEN when it is set, otherwise the sign-in from login.
 
 Secrets a widget declares are read from environment variables of the same name, such as
 GITHUB_TOKEN. To see it on your phone: in ShiftPane, turn on Developer mode in Settings, then
@@ -115,6 +133,87 @@ async function dev(folder: string, pairs: string[], once: boolean): Promise<numb
   return new Promise<number>(() => {})
 }
 
+async function login(printToken: boolean): Promise<number> {
+  const api = marketplaceApi()
+  // With --print-token, stdout carries only the token, so a script can take it.
+  const say = (line: string) => (printToken ? console.error(line) : console.info(line))
+  const signedIn = await deviceSignIn(api, say)
+  if (printToken) {
+    process.stdout.write(`${signedIn.token}\n`)
+    console.error(
+      dim(`Signed in as ${signedIn.login}. Keep it as SHIFTPANE_TOKEN; logout won't end it.`),
+    )
+    return 0
+  }
+  const path = credentialsPath()
+  await writeCredentials(path, signedIn)
+  console.info(`${green('signed in')} as ${signedIn.login}`)
+  console.info(dim(`  kept in ${path}`))
+  return 0
+}
+
+async function logout(): Promise<number> {
+  const path = credentialsPath()
+  const saved = await readCredentials(path)
+  if (!saved) {
+    console.info('Not signed in.')
+    return 0
+  }
+  // The token stops working on the marketplace too, not just here.
+  await marketplaceApi()('POST', '/auth/logout', { token: saved.token }).catch(() => undefined)
+  await removeCredentials(path)
+  console.info(`Signed ${saved.login} out.`)
+  return 0
+}
+
+async function whoami(): Promise<number> {
+  const token = await tokenFor(credentialsPath())
+  if (!token) {
+    console.info('Not signed in. Run shiftpane-widget login.')
+    return 1
+  }
+  const answer = await marketplaceApi()('GET', '/me', { token })
+  const user = answer.body.user as { login?: string; role?: string } | undefined
+  if (answer.status !== 200 || !user?.login) {
+    console.info(red('The sign-in ran out. Run shiftpane-widget login again.'))
+    return 1
+  }
+  console.info(`${user.login}${user.role && user.role !== 'author' ? dim(` (${user.role})`) : ''}`)
+  return 0
+}
+
+async function publish(folder: string, notes: string | undefined): Promise<number> {
+  const token = await tokenFor(credentialsPath())
+  if (!token) {
+    console.info(red('Sign in first: shiftpane-widget login (or set SHIFTPANE_TOKEN).'))
+    return 1
+  }
+  const packed = await packFolder(folder)
+  if (!packed.ok) {
+    printReport(packed.report)
+    return 1
+  }
+  const { manifest } = packed.widget
+  console.info(
+    `${manifest.name} ${dim(`${manifest.id} ${manifest.version}, ${packed.zip.byteLength} bytes`)}`,
+  )
+  const result = await upload(marketplaceApi(), token, packed.zip, notes ?? '')
+  if (!result.ok) {
+    for (const problem of result.problems) console.info(red(`  x ${problem}`))
+    return 1
+  }
+  const name = `${result.widgetId} ${result.version}`
+  if (result.status === 'approved') {
+    console.info(
+      `${green('published')} ${name}: the fast lane took it (${result.fastLane ?? 'no review needed'}).`,
+    )
+  } else {
+    console.info(`${green('uploaded')} ${name}: a person reviews it next.`)
+  }
+  console.info(dim(`  ${MARKETPLACE_URL}/dashboard`))
+  return 0
+}
+
 async function main(): Promise<number> {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
@@ -122,6 +221,8 @@ async function main(): Promise<number> {
       config: { type: 'string', multiple: true },
       once: { type: 'boolean' },
       out: { type: 'string' },
+      notes: { type: 'string' },
+      'print-token': { type: 'boolean' },
       help: { type: 'boolean', short: 'h' },
       version: { type: 'boolean', short: 'v' },
     },
@@ -140,6 +241,14 @@ async function main(): Promise<number> {
       return pack(path, values.out)
     case 'dev':
       return dev(path, values.config ?? [], values.once ?? false)
+    case 'login':
+      return login(values['print-token'] ?? false)
+    case 'logout':
+      return logout()
+    case 'whoami':
+      return whoami()
+    case 'publish':
+      return publish(path, values.notes)
     default:
       console.info(HELP)
       return command && !values.help ? 1 : 0

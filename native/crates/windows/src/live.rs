@@ -237,11 +237,6 @@ pub fn prepare(sizes: &[(u32, u32)]) -> Result<u32, HelperError> {
 }
 
 pub fn attach(mode: Mode) -> Result<DisplayInfo, HelperError> {
-    if mode.scale_percent.is_some() {
-        return Err(HelperError::unsupported(
-            "per-monitor scaling is not implemented on Windows yet",
-        ));
-    }
     let (width, height) = (mode.width, mode.height);
 
     // 0. A virtual monitor Windows is using as a copy of another display cannot extend it.
@@ -298,6 +293,21 @@ pub fn attach(mode: Mode) -> Result<DisplayInfo, HelperError> {
             "Windows did not switch the display to {width}x{height}"
         ))
     })?;
+
+    // 5. Scale it when asked; without a scale it keeps the one Windows has for it.
+    if let Some(percent) = mode.scale_percent {
+        let applied = win32::set_scale(&adapter.device_name, percent)
+            .map_err(|e| internal(format!("could not scale the virtual display: {e}")))?;
+        // Windows reports the new scale for the monitor a moment after it applies it.
+        let wanted = f64::from(applied) / 100.0;
+        let settled = wait_for(APPLY_TIMEOUT, || {
+            let factor = win32::scale_factor(now.x, now.y, now.width, now.height);
+            ((factor - wanted).abs() < 0.01).then_some(())
+        });
+        if settled.is_none() {
+            tracing::debug!(applied, "Windows has not reported the new scale yet");
+        }
+    }
     Ok(to_info(&adapter, now))
 }
 

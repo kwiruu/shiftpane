@@ -123,6 +123,42 @@ pub fn pick_refresh(available: &[u32], wanted: u32) -> Option<u32> {
         .min_by_key(|&hz| (hz.abs_diff(wanted), std::cmp::Reverse(hz)))
 }
 
+/// The scales Windows offers for a display (Settings > Display > Scale), in percent.
+pub const SCALE_STEPS: [u32; 12] = [100, 125, 150, 175, 200, 225, 250, 300, 350, 400, 450, 500];
+
+/// The scale step nearest to `percent`; a tie goes to the smaller one.
+pub fn nearest_scale(percent: u32) -> u32 {
+    SCALE_STEPS
+        .iter()
+        .copied()
+        .min_by_key(|&step| (step.abs_diff(percent), step))
+        .unwrap_or(100)
+}
+
+/// Windows sets a display's scale as a number of steps from the one it recommends for it.
+/// `min_rel` (zero or less) is how many steps 100% is below the recommended one, and `max_rel`
+/// how many steps the largest it allows is above. The steps from the recommended scale to the one
+/// nearest `percent`, within what it allows.
+pub fn scale_steps(percent: u32, min_rel: i32, max_rel: i32) -> i32 {
+    let recommended = i32::try_from(min_rel.unsigned_abs()).unwrap_or(0);
+    let target = SCALE_STEPS
+        .iter()
+        .position(|&step| step == nearest_scale(percent))
+        .and_then(|index| i32::try_from(index).ok())
+        .unwrap_or(0);
+    (target - recommended).clamp(min_rel.min(0), max_rel.max(0))
+}
+
+/// The percent a scale `rel` steps from the recommended one is.
+pub fn scale_percent(rel: i32, min_rel: i32) -> u32 {
+    let index = i64::from(min_rel.unsigned_abs()) + i64::from(rel);
+    usize::try_from(index)
+        .ok()
+        .and_then(|index| SCALE_STEPS.get(index))
+        .copied()
+        .unwrap_or(100)
+}
+
 /// Where to put a monitor that is not on the desktop yet: just right of everything else,
 /// top-aligned. `others` holds `(x, y, width, height)` of the displays already attached.
 pub fn place_right_of(others: &[(i32, i32, u32, u32)]) -> (i32, i32) {
@@ -283,6 +319,30 @@ mod tests {
 
     fn args(list: &[&str]) -> Vec<String> {
         list.iter().map(|s| (*s).to_owned()).collect()
+    }
+
+    #[test]
+    fn picks_the_scale_step_nearest_a_percent() {
+        assert_eq!(nearest_scale(260), 250);
+        // Halfway between two steps goes to the smaller.
+        assert_eq!(nearest_scale(275), 250);
+        assert_eq!(nearest_scale(290), 300);
+        assert_eq!(nearest_scale(90), 100);
+        assert_eq!(nearest_scale(1000), 500);
+    }
+
+    #[test]
+    fn counts_scale_steps_from_the_recommended_one_within_what_windows_allows() {
+        // Windows recommends 150% (100% is two steps below) and allows up to 225% (three above).
+        assert_eq!(scale_steps(100, -2, 3), -2);
+        assert_eq!(scale_steps(150, -2, 3), 0);
+        assert_eq!(scale_steps(200, -2, 3), 2);
+        assert_eq!(scale_steps(300, -2, 3), 3);
+        assert_eq!(scale_percent(3, -2), 225);
+        // Recommended 100%: nothing below it.
+        assert_eq!(scale_steps(50, 0, 6), 0);
+        assert_eq!(scale_percent(0, 0), 100);
+        assert_eq!(scale_percent(4, 0), 200);
     }
 
     #[test]

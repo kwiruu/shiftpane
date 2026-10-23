@@ -32,7 +32,14 @@ TypeScript, a Cargo workspace for the native helper. See README.md for the layou
 - The marketplace site (the `shiftpane-market` repo) draws widgets with this repo's code: its `pnpm sync:shiftpane`
   copies `widget-sdk`, `protocol`, `layout`, `board` and `ui`'s icons into its `vendor/shiftpane`. After changing
   those, re-sync there so the gallery matches the phone.
+- Widget Studio's recipes (`apps/desktop/src/shared/studio.ts`) are a name, sizes and up to four blocks, each one PC
+  reading shown one way; `buildView` makes a layout per size from ordinary view nodes and `buildFiles` an ordinary
+  package. The generator (`main/widgets/generator.ts`) talks only to Ollama on `127.0.0.1:11434`, holds the model to the
+  recipe's JSON schema, and passes its answer through `repairRecipe`: a model never writes view.json or code. Studio's
+  Save writes `Documents\ShiftPane widgets\<id>`; the main process picks that path, the window only sends the recipe.
 - OS-specific Rust goes behind `cfg` in `native/crates/{windows,macos,linux}`; every crate must still compile on every OS.
+  The macOS (`CGVirtualDisplay` through `objc2`) and Linux (Sway, Hyprland, X11) backends are only cross-checked from
+  Windows so far; CI's macOS and Linux jobs are the first to link and start them.
 - Electron windows keep `contextIsolation`, `sandbox` and no `nodeIntegration`; the renderer gets only `window.shiftpane`
   (typed in `apps/desktop/src/preload/api.ts`).
 - The main window is frameless on Windows and Linux (macOS keeps its traffic lights) and draws its own buttons. The
@@ -64,8 +71,14 @@ TypeScript, a Cargo workspace for the native helper. See README.md for the layou
   page costs 1-2 s, hence the warm-up connections on both sides.
 - Cloud sessions behind the agent proxy need `NODE_EXTRA_CA_CERTS=/root/.ccr/ca-bundle.crt` for Electron and
   electron-builder downloads; `.claude/hooks/session-start.sh` sets it.
+- Per-monitor scaling on Windows uses the undocumented `DisplayConfigGet/SetDeviceInfo` types -3 and -4 (what Settings >
+  Display > Scale does), relative to the scale Windows recommends and capped by it: a 1920x1080 monitor stops at 175%.
+  The helper reports the scale it got (`win32::set_scale`, steps in `plan.rs`).
+- zod 4 applies a field's `.default()` even under `.partial()`, so parsing a partial patch fills in every other key.
+  `SettingsService.set` keeps only the keys the patch names; do the same anywhere a partial update is parsed.
 
 ## Plan
 
-The hackathon plan (display mode first, then widgets, split view, AI widget generator, Easter egg, remote control) drives
-priorities. The website (docs + hosted phone demo) is deliberately not started yet.
+Done: display mode, widgets, split view, the marketplace (the `shiftpane-market` repo, live at shiftpane.vercel.app),
+Widget Studio and its generator, per-monitor scaling on Windows. Dropped: the Easter egg. Later: remote control, virtual
+monitors on GNOME and KDE, PC readings (CPU, GPU, media) from the helper on macOS and Linux.

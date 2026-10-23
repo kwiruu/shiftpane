@@ -54,6 +54,7 @@ export class SampleFeed {
   #up = 180 * 1024
   #timer: ReturnType<typeof setInterval> | undefined
   #installed: SampleInstalled[] = []
+  #drafts: SampleInstalled[] = []
 
   /** Starts the feed; calling it again does nothing. */
   start(): void {
@@ -74,9 +75,27 @@ export class SampleFeed {
   /** The installed widgets to preview, replacing any shown before. */
   showInstalled(widgets: SampleInstalled[]): void {
     this.#installed = widgets
+    this.#publishInstalled()
+  }
+
+  /**
+   * Widgets being made (Widget Studio's), previewed like installed ones until they're saved. A
+   * draft with an installed widget's id stands in for it.
+   */
+  showDrafts(widgets: SampleInstalled[]): void {
+    this.#drafts = widgets
+    this.#publishInstalled()
+  }
+
+  #all(): SampleInstalled[] {
+    const drafted = new Set(this.#drafts.map((widget) => widget.id))
+    return [...this.#installed.filter((widget) => !drafted.has(widget.id)), ...this.#drafts]
+  }
+
+  #publishInstalled(): void {
     this.store.handle({
       type: 'widgets.installed',
-      widgets: widgets.map(({ sample: _, config: __, sources: ___, ...widget }) => widget),
+      widgets: this.#all().map(({ sample: _, config: __, sources: ___, ...widget }) => widget),
     })
     this.#updateInstalled()
   }
@@ -100,9 +119,10 @@ export class SampleFeed {
   }
 
   #updateInstalled(): void {
-    if (this.#installed.length === 0) return
+    const widgets = this.#all()
+    if (widgets.length === 0) return
     const all = this.#sources()
-    for (const widget of this.#installed) {
+    for (const widget of widgets) {
       this.#update(widget.id, {
         sources: pickSources(all, widget.sources) as InstalledWidgetData['sources'],
         output: widget.sample as InstalledWidgetData['output'],

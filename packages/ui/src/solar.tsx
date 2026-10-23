@@ -395,6 +395,17 @@ export const SOLAR = {
       d="M19 9L12 15L5 9"
     />
   ),
+  /** solar:alt-arrow-left-linear */
+  'chevron-left': (
+    <path
+      fill="none"
+      stroke="currentColor"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      strokeWidth="1.5"
+      d="M15 5L9 12L15 19"
+    />
+  ),
   /** solar:alt-arrow-right-linear */
   'chevron-right': (
     <path

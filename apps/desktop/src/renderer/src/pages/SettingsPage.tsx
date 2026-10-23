@@ -1,13 +1,13 @@
 import { DEFAULT_BOARD } from '@shiftpane/board'
 import type { Board } from '@shiftpane/protocol'
 import { type ReactNode, useState } from 'react'
-import type { DisplayState } from '../../../shared/display.ts'
+import { type DisplayState, SCALE_CHOICES } from '../../../shared/display.ts'
 import type { FirewallState } from '../../../shared/firewall.ts'
 import type { PairingState } from '../../../shared/pairing.ts'
 import { FirewallNotice } from '../FirewallNotice.tsx'
 import { Segmented } from '../layout/controls.tsx'
 import { Logo } from '../shell/Logo.tsx'
-import { Button, Card, Dot } from '../shell/parts.tsx'
+import { Button, Card, Dot, Select } from '../shell/parts.tsx'
 import { useInstalled } from '../useInstalled.ts'
 import { useSettings } from '../useSettings.ts'
 import { DisplayCard } from './DevicesPage.tsx'
@@ -102,6 +102,39 @@ export function SettingsPage({
       </Card>
 
       <DisplayCard display={display} phones={phones} />
+
+      {platform === 'windows' && (
+        <Card title="Monitor scale" icon="monitor">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-medium text-sm">Text size on the phone's monitor</p>
+              <p className="mt-1 text-ink-muted text-sm">
+                Matching the phone makes text the size it is in the phone's own apps. Windows may
+                cap it on a small monitor.
+              </p>
+            </div>
+            <Select
+              aria-label="Monitor scale"
+              className="w-44 shrink-0"
+              value={String(settings.monitorScale)}
+              onChange={(event) => {
+                const value = event.target.value
+                setSettings({
+                  monitorScale: value === 'phone' || value === 'os' ? value : Number(value),
+                })
+              }}
+            >
+              <option value="phone">Match the phone</option>
+              <option value="os">Leave it to Windows</option>
+              {SCALE_CHOICES.map((percent) => (
+                <option key={percent} value={percent}>
+                  {percent}%
+                </option>
+              ))}
+            </Select>
+          </div>
+        </Card>
+      )}
 
       <Card title="Phone layout" icon="layout">
         <Fact label="Tables">{board.tables.length}</Fact>

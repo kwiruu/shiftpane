@@ -8,8 +8,14 @@ use std::mem::{size_of, zeroed};
 use std::ptr::{null, null_mut};
 use std::sync::Once;
 
-use windows_sys::Win32::Devices::Display::{SDC_APPLY, SDC_TOPOLOGY_EXTEND, SetDisplayConfig};
-use windows_sys::Win32::Foundation::POINT;
+use windows_sys::Win32::Devices::Display::{
+    DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME, DISPLAYCONFIG_DEVICE_INFO_HEADER,
+    DISPLAYCONFIG_DEVICE_INFO_TYPE, DISPLAYCONFIG_MODE_INFO, DISPLAYCONFIG_PATH_INFO,
+    DISPLAYCONFIG_SOURCE_DEVICE_NAME, DisplayConfigGetDeviceInfo, DisplayConfigSetDeviceInfo,
+    GetDisplayConfigBufferSizes, QDC_ONLY_ACTIVE_PATHS, QueryDisplayConfig, SDC_APPLY,
+    SDC_TOPOLOGY_EXTEND, SetDisplayConfig,
+};
+use windows_sys::Win32::Foundation::{LUID, POINT};
 use windows_sys::Win32::Graphics::Gdi::{
     CDS_NORESET, CDS_TEST, CDS_UPDATEREGISTRY, ChangeDisplaySettingsExW, DEVMODEW,
     DISP_CHANGE_SUCCESSFUL, DISPLAY_DEVICE_ACTIVE, DISPLAY_DEVICE_ATTACHED_TO_DESKTOP,
@@ -324,4 +330,126 @@ pub fn scale_factor(x: i32, y: i32, width: u32, height: u32) -> f64 {
     } else {
         1.0
     }
+}
+
+// ---------------------------------------------------------------------------------------
+// Scale
+// ---------------------------------------------------------------------------------------
+
+/// Windows' own requests for a display source's scale, the ones Settings > Display > Scale makes.
+/// They aren't documented, but every per-monitor scaling tool uses them: get answers how many
+/// steps the current, smallest and largest allowed scales are from the recommended one, and set
+/// moves the scale to a number of steps from it.
+const DPI_SCALE_GET: DISPLAYCONFIG_DEVICE_INFO_TYPE = -3;
+const DPI_SCALE_SET: DISPLAYCONFIG_DEVICE_INFO_TYPE = -4;
+
+#[repr(C)]
+struct DpiScaleGet {
+    header: DISPLAYCONFIG_DEVICE_INFO_HEADER,
+    min_rel: i32,
+    current_rel: i32,
+    max_rel: i32,
+}
+
+#[repr(C)]
+struct DpiScaleSet {
+    header: DISPLAYCONFIG_DEVICE_INFO_HEADER,
+    rel: i32,
+}
+
+fn info_header(
+    kind: DISPLAYCONFIG_DEVICE_INFO_TYPE,
+    size: usize,
+    adapter: LUID,
+    id: u32,
+) -> DISPLAYCONFIG_DEVICE_INFO_HEADER {
+    DISPLAYCONFIG_DEVICE_INFO_HEADER {
+        r#type: kind,
+        size: u32::try_from(size).unwrap_or(0),
+        adapterId: adapter,
+        id,
+    }
+}
+
+/// The `DisplayConfig` source showing this GDI device (`\\.\DISPLAY7`): its adapter and id.
+fn display_source(device: &str) -> Option<(LUID, u32)> {
+    let (mut path_count, mut mode_count) = (0_u32, 0_u32);
+    // SAFETY: both out-pointers are valid for the call.
+    let code = unsafe {
+        GetDisplayConfigBufferSizes(
+            QDC_ONLY_ACTIVE_PATHS,
+            &raw mut path_count,
+            &raw mut mode_count,
+        )
+    };
+    if code != 0 {
+        return None;
+    }
+    // SAFETY: all-zero path and mode structs are valid empty values; Windows fills them in.
+    let mut paths: Vec<DISPLAYCONFIG_PATH_INFO> =
+        vec![unsafe { zeroed() }; usize::try_from(path_count).unwrap_or(0)];
+    // SAFETY: as above.
+    let mut modes: Vec<DISPLAYCONFIG_MODE_INFO> =
+        vec![unsafe { zeroed() }; usize::try_from(mode_count).unwrap_or(0)];
+    // SAFETY: each array holds as many elements as its count says; no topology id is wanted.
+    let code = unsafe {
+        QueryDisplayConfig(
+            QDC_ONLY_ACTIVE_PATHS,
+            &raw mut path_count,
+            paths.as_mut_ptr(),
+            &raw mut mode_count,
+            modes.as_mut_ptr(),
+            null_mut(),
+        )
+    };
+    if code != 0 {
+        return None;
+    }
+    paths.truncate(usize::try_from(path_count).unwrap_or(0));
+    paths.iter().find_map(|path| {
+        let (adapter, id) = (path.sourceInfo.adapterId, path.sourceInfo.id);
+        // SAFETY: an all-zero name struct is a valid empty value.
+        let mut name: DISPLAYCONFIG_SOURCE_DEVICE_NAME = unsafe { zeroed() };
+        name.header = info_header(
+            DISPLAYCONFIG_DEVICE_INFO_GET_SOURCE_NAME,
+            size_of::<DISPLAYCONFIG_SOURCE_DEVICE_NAME>(),
+            adapter,
+            id,
+        );
+        // SAFETY: the header starts the struct and its size covers all of it.
+        let code = unsafe { DisplayConfigGetDeviceInfo((&raw mut name).cast()) };
+        (code == 0 && from_wide(&name.viewGdiDeviceName).eq_ignore_ascii_case(device))
+            .then_some((adapter, id))
+    })
+}
+
+/// Sets the scale of the display showing `device` to the step nearest `percent`, within what
+/// Windows allows for that display, and returns the percent it has now.
+pub fn set_scale(device: &str, percent: u32) -> Result<u32, String> {
+    let (adapter, id) =
+        display_source(device).ok_or_else(|| format!("{device} is not on the desktop"))?;
+    let mut get = DpiScaleGet {
+        header: info_header(DPI_SCALE_GET, size_of::<DpiScaleGet>(), adapter, id),
+        min_rel: 0,
+        current_rel: 0,
+        max_rel: 0,
+    };
+    // SAFETY: the header starts the struct and its size covers all of it.
+    let code = unsafe { DisplayConfigGetDeviceInfo((&raw mut get).cast()) };
+    if code != 0 {
+        return Err(format!("reading its scale failed ({code})"));
+    }
+    let rel = plan::scale_steps(percent, get.min_rel, get.max_rel);
+    if rel != get.current_rel {
+        let set = DpiScaleSet {
+            header: info_header(DPI_SCALE_SET, size_of::<DpiScaleSet>(), adapter, id),
+            rel,
+        };
+        // SAFETY: as above; Windows only reads it.
+        let code = unsafe { DisplayConfigSetDeviceInfo((&raw const set).cast()) };
+        if code != 0 {
+            return Err(format!("setting its scale failed ({code})"));
+        }
+    }
+    Ok(plan::scale_percent(rel, get.min_rel))
 }

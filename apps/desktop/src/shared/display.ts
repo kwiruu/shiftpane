@@ -40,3 +40,12 @@ export type DisplayState =
       /** The size that could not be set up, when the problem is about one. */
       size: MonitorSize | null
     }
+
+/**
+ * How big things are on the phone's monitor: the size of the phone's own apps (`phone`), whatever
+ * the OS picks for it (`os`), or a scale in percent.
+ */
+export type MonitorScale = 'phone' | 'os' | number
+
+/** The scales offered for the phone's monitor: Windows' own steps, up to 300%. */
+export const SCALE_CHOICES = [100, 125, 150, 175, 200, 225, 250, 300] as const

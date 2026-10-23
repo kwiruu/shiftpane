@@ -93,11 +93,13 @@ export function refreshSeconds(entry: Pick<InstalledEntry, 'widget'>): number {
  * every `refreshSeconds`, one run at a time across all widgets.
  *
  * `installed` fires when the list or a widget's config changes (phones and collectors follow it),
- * `status` when a collector run finished.
+ * `status` when a collector run finished, and `added` when the user installs one, saying whether it
+ * is new to this PC or an update.
  */
 export class InstalledWidgets extends EventEmitter<{
   installed: []
   status: []
+  added: [{ id: string; origin: Origin; first: boolean }]
   /** A button on this widget was pressed; what it shows may have changed. */
   pressed: [string]
 }> {
@@ -413,9 +415,11 @@ export class InstalledWidgets extends EventEmitter<{
       return { ok: false, problem: 'That check has expired. Try again.' }
     }
     try {
+      const first = !this.#options.store.get(pending.widget.manifest.id)
       const entry = await this.#options.store.put(pending.widget, pending.texts, pending.origin)
       this.#runs.delete(entry.id)
       this.#changed()
+      this.emit('added', { id: entry.id, origin: pending.origin, first })
       return { ok: true, id: entry.id }
     } catch (error) {
       return { ok: false, problem: `It couldn't be saved: ${(error as Error).message}` }

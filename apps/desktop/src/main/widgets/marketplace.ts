@@ -1,5 +1,6 @@
 import { openPackage, type PackageTexts, packageTexts } from '@shiftpane/widget-runtime'
 import {
+  API_URL,
   compareVersions,
   type IndexEntry,
   type IndexVersion,
@@ -12,6 +13,17 @@ import {
 import type { FolderCheck } from '../../shared/widgets.ts'
 import type { InstalledWidgets, StoreNote } from './installed.ts'
 import type { Registry } from './registry.ts'
+
+/**
+ * Tells the marketplace a widget from it was installed on one more PC, for the count on its page.
+ * Only the widget's id goes; a failure is ignored, since the count is a courtesy.
+ */
+export async function reportInstall(id: string, fetcher: typeof fetch = fetch): Promise<void> {
+  await fetcher(`${API_URL}/widgets/${encodeURIComponent(id)}/installed`, {
+    method: 'POST',
+    signal: AbortSignal.timeout(10_000),
+  }).catch(() => undefined)
+}
 
 /** How often the revocations and the index are read again while the app runs. */
 export const REFRESH_MS = 6 * 60 * 60_000

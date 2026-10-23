@@ -73,7 +73,7 @@ fn backend() -> Box<dyn DisplayBackend> {
 
 #[cfg(target_os = "macos")]
 fn backend() -> Box<dyn DisplayBackend> {
-    Box::new(shiftpane_macos::VirtualDisplayBackend)
+    Box::new(shiftpane_macos::VirtualDisplayBackend::default())
 }
 
 #[cfg(target_os = "linux")]
