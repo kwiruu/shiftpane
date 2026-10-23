@@ -139,7 +139,7 @@ function PairCard({ state, firewall }: { state: PairingState; firewall: Firewall
 
   const origin = `https://${state.host}:${state.port}`
   const steps = [
-    'Join the same Wi-Fi as this PC.',
+    'Join a Wi-Fi network that allows devices to communicate.',
     "Scan the QR code with the phone's camera.",
     'Accept the certificate warning once; it is expected.',
   ]
@@ -147,6 +147,7 @@ function PairCard({ state, firewall }: { state: PairingState; firewall: Firewall
     <Card
       title="Pair a phone"
       icon="qr"
+      bodyClassName="overflow-y-auto p-5"
       aside={
         <Button
           icon="refresh"
@@ -162,7 +163,7 @@ function PairCard({ state, firewall }: { state: PairingState; firewall: Firewall
           <FirewallNotice key={firewall.reason} state={firewall} />
         </div>
       )}
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-8">
+      <div className="my-auto flex shrink-0 flex-col items-center gap-6 py-3">
         <div className="hatched rounded-[1.375rem] border border-border bg-surface p-2">
           <img
             src={`data:image/svg+xml;utf8,${encodeURIComponent(state.qrSvg)}`}
@@ -182,6 +183,11 @@ function PairCard({ state, firewall }: { state: PairingState; firewall: Firewall
               </li>
             ))}
           </ol>
+          <p className="mt-3 text-xs text-ink-muted">
+            The same Wi-Fi name is not always enough: guest networks and device isolation can block
+            pairing. A phone hotspot also works. The QR updates automatically when this PC changes
+            networks.
+          </p>
           <div className="mt-6">
             {state.hosts.length > 1 ? (
               <div className="flex flex-col gap-2">
@@ -207,6 +213,53 @@ function PairCard({ state, firewall }: { state: PairingState; firewall: Firewall
               </p>
             )}
           </div>
+          <details className="mt-4 rounded-xl border border-border bg-surface p-4">
+            <summary className="cursor-pointer text-sm font-medium">Phone won’t connect?</summary>
+            <div className="mt-4 flex flex-col gap-4 text-sm text-ink-soft">
+              <p role="status" aria-live="polite">
+                {state.phones.length > 0
+                  ? 'A phone is connected to this PC.'
+                  : state.diagnostics.socketAt !== null
+                    ? 'A device reached the pairing connection, but pairing is not complete.'
+                    : state.diagnostics.testAt !== null
+                      ? 'The connection test reached this PC. Scan the main pairing QR code next.'
+                      : state.diagnostics.pageAt !== null
+                        ? 'The phone page was requested. If it stays blank, reload it and check for an on-screen error.'
+                        : 'No phone page or test request has reached this PC since this network or QR code was selected. This does not identify the cause.'}
+              </p>
+              <p>
+                Scan this test QR with your phone. It opens a tiny page without loading the phone
+                app or pairing your device.
+              </p>
+              <img
+                src={`data:image/svg+xml;utf8,${encodeURIComponent(state.connectionTestQrSvg)}`}
+                alt="Connection test QR code"
+                className="size-40 self-center rounded-xl bg-white p-3"
+              />
+              <p className="break-all font-mono text-xs">{origin}/connection-test</p>
+              <ol className="list-decimal space-y-2 pl-5">
+                <li>
+                  If the test page never opens, check the firewall notice above and confirm both
+                  devices use the same network. Guest Wi-Fi or client isolation may prevent devices
+                  from reaching each other; the app cannot determine that from a missing request.
+                </li>
+                <li>
+                  If the test succeeds, scan the main QR again. A successful test confirms page
+                  reachability, not completed pairing.
+                </li>
+                <li>
+                  To test another network: turn on Personal Hotspot and Allow Others to Join on your
+                  phone, then connect this PC to it. Wait for the QR address to update and scan the
+                  new main QR. Do not reuse the old link.
+                </li>
+              </ol>
+              <p className="text-xs text-ink-muted">
+                Request status is temporary, covers any other device reaching this PC, and resets
+                for a new QR or network. A certificate warning must be handled on the phone. No need
+                to disable your firewall.
+              </p>
+            </div>
+          </details>
         </div>
       </div>
     </Card>

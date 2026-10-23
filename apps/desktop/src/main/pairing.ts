@@ -75,6 +75,15 @@ export class PairingService extends EventEmitter<{ change: [PairingState] }> {
   #tls: TlsCredentials | null = null
   #hosts: LanHost[] = []
   #host = ''
+  #networkTimer: ReturnType<typeof setInterval> | undefined
+  #publishRevision = 0
+  #running = false
+  #refreshing = false
+  #diagnostics = {
+    pageAt: null as number | null,
+    testAt: null as number | null,
+    socketAt: null as number | null,
+  }
 
   constructor(options: PairingServiceOptions) {
     super()
@@ -106,36 +115,72 @@ export class PairingService extends EventEmitter<{ change: [PairingState] }> {
   }
 
   async start(): Promise<void> {
+    if (this.#running) return
+    this.#running = true
+    await this.#phones.load()
+    await this.refreshNetwork()
+    if (!this.#running) return
+    this.#networkTimer = setInterval(() => void this.refreshNetwork(), 5_000)
+  }
+
+  /** Refresh addresses and the TLS context without disconnecting already paired phones. */
+  async refreshNetwork(): Promise<void> {
+    if (!this.#running || this.#refreshing) return
+    this.#refreshing = true
     try {
-      await this.#phones.load()
-      this.#hosts = lanAddresses()
-      if (this.#hosts.length === 0) {
+      const hosts = lanAddresses()
+      if (this.#server && JSON.stringify(hosts) === JSON.stringify(this.#hosts)) return
+      if (hosts.length === 0) {
+        this.#hosts = []
         this.#setState({
           status: 'error',
-          message: 'This PC has no network address. Connect to Wi-Fi or Ethernet.',
+          message:
+            'This PC has no network address. Connect to Wi-Fi or a phone hotspot. The QR code will update automatically.',
         })
         return
       }
-      this.#host = this.#hosts[0]?.address ?? ''
-      this.#tls = await loadOrCreateCertificate(
+      const tls = await loadOrCreateCertificate(
         this.#options.dataDir,
-        this.#hosts.map((h) => h.address),
+        hosts.map((h) => h.address),
       )
-      this.#server = await startLanServer({
-        tls: this.#tls,
-        staticRoot: this.#options.staticRoot,
-        hub: this.hub,
-        // Where phones found this PC last time; an app on a home screen knows no other.
-        port: this.#phones.port,
-      })
-      this.#phones.port = this.#server.port
-      this.#replaceCode()
+      if (!this.#running) return
+      const host = hosts.some((h) => h.address === this.#host)
+        ? this.#host
+        : (hosts[0]?.address ?? '')
+      if (this.#server) this.#server.updateTls(tls)
+      else {
+        const server = await startLanServer({
+          tls,
+          staticRoot: this.#options.staticRoot,
+          hub: this.hub,
+          port: this.#phones.port,
+          onPhoneRequest: (stage) => {
+            if (this.#diagnostics[`${stage}At`] !== null) return
+            this.#diagnostics[`${stage}At`] = this.#now()
+            void this.#publish()
+          },
+        })
+        if (!this.#running) {
+          await server.close()
+          return
+        }
+        this.#server = server
+        this.#phones.port = server.port
+        this.#replaceCode()
+      }
+      this.#tls = tls
+      this.#hosts = hosts
+      this.#host = host
+      this.#diagnostics = { pageAt: null, testAt: null, socketAt: null }
       await this.#publish()
     } catch (error) {
-      this.#setState({
-        status: 'error',
-        message: `Could not start the local server: ${String(error)}`,
-      })
+      if (this.#running)
+        this.#setState({
+          status: 'error',
+          message: `Could not refresh the local server: ${String(error)}`,
+        })
+    } finally {
+      this.#refreshing = false
     }
   }
 
@@ -143,12 +188,14 @@ export class PairingService extends EventEmitter<{ change: [PairingState] }> {
   async selectHost(address: string): Promise<void> {
     if (!this.#hosts.some((h) => h.address === address)) return
     this.#host = address
+    this.#diagnostics = { pageAt: null, testAt: null, socketAt: null }
     await this.#publish()
   }
 
   /** Replaces the QR code and the pairing code. Phones already paired stay connected. */
   async newCode(): Promise<void> {
     this.#token = this.#makeToken()
+    this.#diagnostics = { pageAt: null, testAt: null, socketAt: null }
     this.#replaceCode()
     await this.#publish()
   }
@@ -164,6 +211,9 @@ export class PairingService extends EventEmitter<{ change: [PairingState] }> {
   }
 
   async stop(): Promise<void> {
+    this.#running = false
+    this.#publishRevision += 1
+    clearInterval(this.#networkTimer)
     clearTimeout(this.#codeTimer)
     this.hub.closeAll()
     await this.#server?.close()
@@ -225,13 +275,32 @@ export class PairingService extends EventEmitter<{ change: [PairingState] }> {
   }
 
   async #publish(): Promise<void> {
-    if (!this.#server || !this.#tls) return
+    if (!this.#running || !this.#server || !this.#tls) return
+    const revision = ++this.#publishRevision
     const url = pairingUrl({ host: this.#host, port: this.#server.port, token: this.#token })
-    const qrSvg = await QRCode.toString(url, { type: 'svg', errorCorrectionLevel: 'M', margin: 1 })
+    const origin = `https://${this.#host}:${this.#server.port}`
+    const [qrSvg, connectionTestQrSvg] = await Promise.all([
+      QRCode.toString(url, { type: 'svg', errorCorrectionLevel: 'M', margin: 1 }),
+      QRCode.toString(`${origin}/connection-test`, {
+        type: 'svg',
+        errorCorrectionLevel: 'M',
+        margin: 1,
+      }),
+    ])
+    if (
+      !this.#running ||
+      revision !== this.#publishRevision ||
+      !this.#server ||
+      !this.#tls ||
+      this.#hosts.length === 0
+    )
+      return
     this.#setState({
       status: 'ready',
       url,
       qrSvg,
+      connectionTestQrSvg,
+      diagnostics: { ...this.#diagnostics },
       host: this.#host,
       hosts: this.#hosts,
       port: this.#server.port,

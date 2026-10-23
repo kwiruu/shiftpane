@@ -121,3 +121,11 @@ see [.claude/skills/README.md](.claude/skills/README.md) for sources and license
 ## License
 
 [MIT](LICENSE). Third-party projects are used as dependencies or references only; Virtual Display Driver is installed by the user and never bundled.
+
+### When a phone cannot open the pairing page
+
+Both devices must be on a network that lets them communicate directly. Matching Wi-Fi names alone do not guarantee this: guest networks and client isolation can block local connections.
+
+Open **Phone won’t connect?** beside the QR code on Devices. Its separate test QR opens a tiny, script-free HTTPS page without pairing the phone. The PC reports whether another device requested the phone page, completed the test request, or reached the pairing connection. A missing request does not establish whether the cause is Wi-Fi isolation, a firewall, certificate handling, or another restriction. Local checks from the PC are excluded; observations are temporary and reset when the QR or selected network changes.
+
+As a comparison test, enable Personal Hotspot and Allow Others to Join on the phone, connect the PC to it, and scan the updated main QR. ShiftPane checks adapter addresses every five seconds and refreshes its QR and certificate without restarting or dropping existing connections. If an address disappears, it chooses an available one; a manual adapter choice is kept while that address remains available. After temporary network loss, the QR returns automatically. A home-screen shortcut remains tied to its old network address and may need to be added again after switching networks.

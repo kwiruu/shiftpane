@@ -204,6 +204,8 @@ export function describeConnection(state: ConnectionState): {
       return {
         title: state.reason === 'disconnected' ? 'Disconnected' : "Can't connect",
         detail: {
+          'connection-failed':
+            'Safari could not open the connection to your PC. Reload this page and check that both devices are on the same Wi-Fi.',
           disconnected: 'This phone was disconnected from the PC. It is still paired.',
           'protocol-mismatch':
             'The phone app and the desktop app are different versions. Update ShiftPane on the PC.',

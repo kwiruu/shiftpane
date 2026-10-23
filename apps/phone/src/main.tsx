@@ -1,16 +1,4 @@
-import { StrictMode } from 'react'
-import { createRoot } from 'react-dom/client'
-import { App } from './App.tsx'
-import './index.css'
-import { startUpdates } from './updates.ts'
+import { showStartupFailure } from './startup.ts'
 
-const root = document.getElementById('root')
-if (!root) throw new Error('missing #root')
-
-startUpdates()
-
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-)
+// Catch initialization errors from the app or its connection modules before mounting React.
+void import('./mount.tsx').catch(showStartupFailure)

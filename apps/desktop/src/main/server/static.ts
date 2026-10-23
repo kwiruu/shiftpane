@@ -36,6 +36,26 @@ export const SECURITY_HEADERS: Readonly<Record<string, string>> = {
   'Cross-Origin-Opener-Policy': 'same-origin',
 }
 
+/** Explicit same-host WSS source for browsers that do not match WebSockets to 'self'. */
+export function securityHeaders(host: string | undefined): Readonly<Record<string, string>> {
+  if (!host) return SECURITY_HEADERS
+  try {
+    const url = new URL(`https://${host}`)
+    // Reject credentials, paths and directive injection before reflecting the authority.
+    if (url.host.toLowerCase() !== host.toLowerCase()) return SECURITY_HEADERS
+    return {
+      ...SECURITY_HEADERS,
+      'Content-Security-Policy':
+        SECURITY_HEADERS['Content-Security-Policy']?.replace(
+          "connect-src 'self'",
+          `connect-src 'self' wss://${url.host}`,
+        ) ?? '',
+    }
+  } catch {
+    return SECURITY_HEADERS
+  }
+}
+
 /**
  * Maps a request path to a file under `root`, or null if it would escape `root`.
  * Paths without an extension fall back to index.html (client-side routes).
@@ -64,7 +84,8 @@ function cacheControl(file: string): string {
 /** Serves the built phone app from `root`. GET and HEAD only. */
 export function createStaticHandler(root: string) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
-    for (const [name, value] of Object.entries(SECURITY_HEADERS)) res.setHeader(name, value)
+    for (const [name, value] of Object.entries(securityHeaders(req.headers.host)))
+      res.setHeader(name, value)
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       res.writeHead(405, { Allow: 'GET, HEAD' }).end()
       return
