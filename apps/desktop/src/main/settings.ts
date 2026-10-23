@@ -10,6 +10,9 @@ const Saved = z.object({
     .regex(/^[\w.:/-]{1,128}$/)
     .nullable()
     .default(null),
+  monitorScale: z
+    .union([z.literal('phone'), z.literal('os'), z.number().int().min(100).max(500)])
+    .default('phone'),
 })
 
 /** App-wide settings from the desktop window, kept between runs. */
@@ -40,7 +43,11 @@ export class SettingsService extends EventEmitter<{ change: [AppSettings] }> {
     await this.#loaded
     const parsed = Saved.partial().safeParse(patch)
     if (!parsed.success) return this.#settings
-    this.#settings = { ...this.#settings, ...parsed.data }
+    // zod fills in the defaults of keys the patch left out; only the ones it names change.
+    const named = Object.fromEntries(
+      Object.entries(parsed.data).filter(([key]) => Object.hasOwn(patch, key)),
+    )
+    this.#settings = { ...this.#settings, ...named }
     await this.#storage.write(JSON.stringify(this.#settings))
     this.emit('change', this.#settings)
     return this.#settings
