@@ -6,7 +6,7 @@ import type { IndexVersion, Permissions, RegistryIndex, RevokedList } from '@shi
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fileStorage } from '../storage.ts'
 import { InstalledWidgets } from './installed.ts'
-import { Marketplace } from './marketplace.ts'
+import { Marketplace, reportInstall } from './marketplace.ts'
 import type { Registry } from './registry.ts'
 import { type Cipher, WidgetSecrets } from './secrets.ts'
 import type { SourceReader } from './sources.ts'
@@ -134,8 +134,40 @@ describe('Marketplace', () => {
       widget: { version: '1.1.0' },
     })
     if (check.status !== 'ready') throw new Error('not ready')
+    const added: { id: string; first: boolean }[] = []
+    installed.on('added', ({ id, first }) => added.push({ id, first }))
     expect(await installed.install(check.token)).toEqual({ ok: true, id: 'gpu-ring' })
     expect(installed.list()[0]?.origin).toMatchObject({ kind: 'marketplace', version: '1.1.0' })
+
+    // An update of it is not a first install, so the marketplace doesn't count it again.
+    publish({ version: '1.1.0' }, { version: '1.2.0' })
+    const update = await marketplace.check('gpu-ring')
+    if (update.status !== 'ready') throw new Error('not ready')
+    await installed.install(update.token)
+    expect(added).toEqual([
+      { id: 'gpu-ring', first: true },
+      { id: 'gpu-ring', first: false },
+    ])
+  })
+
+  it('reports an install with the widget id and nothing else, and shrugs off a failure', async () => {
+    const asked: { url: string; init?: RequestInit }[] = []
+    await reportInstall('gpu-ring', (async (url: string, init?: RequestInit) => {
+      asked.push({ url, init })
+      return new Response(null, { status: 204 })
+    }) as typeof fetch)
+    expect(asked).toEqual([
+      {
+        url: 'https://shiftpane.vercel.app/api/v1/widgets/gpu-ring/installed',
+        init: expect.objectContaining({ method: 'POST' }),
+      },
+    ])
+    expect(asked[0]?.init?.body).toBeUndefined()
+    await expect(
+      reportInstall('gpu-ring', (async () => {
+        throw new TypeError('offline')
+      }) as typeof fetch),
+    ).resolves.toBeUndefined()
   })
 
   it('refuses a package that asks for more than the signed index lists', async () => {

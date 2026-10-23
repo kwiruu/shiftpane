@@ -16,7 +16,7 @@ import {
 import { FolderWatcher } from './folders.ts'
 import { Generator } from './generator.ts'
 import { InstalledWidgets } from './installed.ts'
-import { Marketplace } from './marketplace.ts'
+import { Marketplace, reportInstall } from './marketplace.ts'
 import { Registry } from './registry.ts'
 import { type Cipher, WidgetSecrets } from './secrets.ts'
 import { WidgetService } from './service.ts'
@@ -107,6 +107,10 @@ export function startWidgets(options: WidgetsOptions): Widgets {
   installed.on('pressed', (id) => service.refresh(id))
   // The built-in ids are reserved, so an installed widget never replaces one.
   installed.on('installed', () => service.setCollectors({ ...installed.collectors(), ...builtIn }))
+  // The marketplace counts first installs from it; updates and folders aren't counted.
+  installed.on('added', ({ id, origin, first }) => {
+    if (first && origin.kind === 'marketplace') void reportInstall(id)
+  })
   const marketplace = new Marketplace({
     registry: new Registry({ dir: join(options.dataDir, 'registry'), log }),
     installed,
