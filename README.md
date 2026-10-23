@@ -3,12 +3,12 @@
 Scan a QR code and your phone becomes a monitor shaped exactly like it, with your live stats beside it.
 No cable, no dummy plug, no app store.
 
-- **Display mode.** The phone becomes a real extra monitor. The OS sees a new display sized to the phone, and you drag windows onto it.
-- **Dashboard mode.** The phone shows widgets: PC telemetry, GitHub stats, Claude Code usage, and anything the community builds.
+- **Display mode.** The phone becomes a real extra monitor. The OS sees a new display sized to the phone, and you drag windows onto it, with text scaled to the size of the phone's own apps.
+- **Widget board.** The phone shows widgets: the clock, calendar, what's playing and PC stats that come with the app, and any you install from the [gallery](https://shiftpane.vercel.app/widgets).
 - **Split view.** Both at once. The split you pick is the resolution of the second monitor.
-- **Widget gallery.** Every widget is a small folder anyone can write and submit by pull request; a local open-weight model can generate new ones from a sentence.
+- **Make your own.** Widget Studio builds one without code, or from a sentence written by an open-weights model running on your PC; developers use the SDK and `shiftpane-widget`. Every widget is a small folder, checked and reviewed before the gallery lists it.
 
-> **Status:** early development. The monorepo, shared contracts, app shells, native helper skeleton and CI are in place; display mode, widgets and pairing are being built now.
+> **Status:** first release coming. Display mode, the widget board, split view, the marketplace, Widget Studio and per-monitor scaling work on Windows. The macOS and Linux virtual monitors are written and compile, but haven't been run on those systems yet.
 
 ## Repository layout
 
@@ -19,21 +19,27 @@ apps/
 packages/
   protocol/           PC <-> phone WebSocket messages and pairing tokens (zod)
   layout/             Split-view math: phone size + split + pixel ratio -> monitor resolution
-  board/              Widget board: tables of widgets and the built-in widgets (React), for phone and desktop
-  widget-sdk/         Widget manifest schema (+ generated JSON Schema) and defineCollector
+  board/              Widget board: tables of widgets, the built-in widgets and ViewWidget (React), for phone, desktop and the website
+  widget-sdk/         The widget package format: manifest, view, sources, permissions (npm: @shiftpane/widget-sdk)
+  widget-runtime/     Runs collectors in QuickJS with a guarded fetch; checks and packs packages (npm: @shiftpane/widget-runtime)
+  widget-cli/         shiftpane-widget: validate, dev, pack, login, publish (npm)
+  create-widget/      npm create shiftpane-widget: a new widget from a template (npm)
   helper-client/      Typed client for the native helper; types generated from Rust
-  ui/                 Tailwind v4 design tokens shared by both apps
+  ui/                 Tailwind v4 design tokens and Solar icons shared by every app
 native/
   crates/core/        Helper wire protocol, mode validation, DisplayBackend trait, request loop
-  crates/windows/     Virtual Display Driver (IddCx) + Win32 display control
+  crates/windows/     Virtual Display Driver (IddCx), Win32 display control and scaling, PC readings
   crates/macos/       CGVirtualDisplay: in-process virtual monitor, no driver
-  crates/linux/       Mutter / KWin / wlroots / X11 virtual outputs
+  crates/linux/       Headless outputs on Sway and Hyprland, xrandr modes on X11
   crates/helper/      shiftpane-helper binary
 .claude/              Project skills, plugins and the cloud-session setup hook
 .github/workflows/    CI on every push; installers on version tags
 ```
 
-Planned: `widgets/` (built-in and community widgets plus `registry.json`) and `apps/web` (documentation site and hosted phone demo).
+The website, gallery and the API behind it are their own repository,
+[kwiruu/shiftpane-market](https://github.com/kwiruu/shiftpane-market), live at
+[shiftpane.vercel.app](https://shiftpane.vercel.app). It draws widgets with this repo's `board` and reads them with
+its `widget-sdk`, copied in by its `pnpm sync:shiftpane`.
 
 ## How it fits together
 
@@ -50,8 +56,10 @@ Secrets and system access stay on the PC; the phone only ever receives video and
 
 | | Windows | macOS | Linux |
 | --- | --- | --- | --- |
-| Virtual monitor | [Virtual Display Driver](https://github.com/VirtualDrivers/Virtual-Display-Driver) (user installs once: `winget install`, then Install in VDD Control) | `CGVirtualDisplay`, built in (macOS 11+) | Compositor-specific: GNOME, KDE, wlroots, X11 |
-| Widgets and dashboard | ✓ | ✓ | ✓ |
+| Virtual monitor | [Virtual Display Driver](https://github.com/VirtualDrivers/Virtual-Display-Driver) (user installs once: `winget install`, then Install in VDD Control) | `CGVirtualDisplay`, built in (macOS 11+); not yet run | Sway and Hyprland headless outputs, X11 with a spare output; not yet run. GNOME and KDE later |
+| Monitor scale | Per monitor, matched to the phone | HiDPI (2x) | Per output on Sway and Hyprland |
+| Widget board | ✓ | ✓ | ✓ |
+| PC readings for widgets (CPU, GPU, media, ...) | ✓ | Later | Later |
 | Installer | NSIS `.exe` | `.dmg` | AppImage, `.deb` |
 
 ## Tech stack
@@ -66,6 +74,8 @@ Secrets and system access stay on the PC; the phone only ever receives video and
 | Lint and format | Biome 2, rustfmt, clippy (pedantic) | Fast, single tool per language |
 | Types | TypeScript 7 (native compiler) | Strict mode, `noUncheckedIndexedAccess`; typechecks the whole repo in seconds |
 | Tests | Vitest 5 + fast-check (property tests), `cargo test` | Core logic covered by example and property tests |
+| Widget sandbox | QuickJS (WebAssembly) with a capped memory and a guarded `fetch` | Third-party collectors run with no file system, no processes, and only the hosts they declare |
+| Widget generator | An open-weights model in [Ollama](https://ollama.com) on the user's PC (Qwen3 4B suggested) | Free, offline, nothing leaves the PC; the model fills in a schema-checked recipe, never code |
 | Packaging | electron-builder 26, GitHub Actions | Installers for all three OSes from one tag |
 
 Vite is held at 7 because electron-vite 5 does not support Vite 8 yet; move both when electron-vite 6 is stable.
@@ -98,6 +108,10 @@ whose storage it does not share), so it asks for the six-digit code shown under 
 | `pnpm build` | Production builds of every package |
 | `pnpm package` | Phone build + release helper + installer for the current OS in `apps/desktop/release/` |
 | `cargo run -p shiftpane-helper -- info` | Print this machine's virtual-display readiness |
+
+Making a widget: `npm create shiftpane-widget@latest`, then `npx shiftpane-widget dev`, `validate`, `pack` and
+`publish`, or Widget Studio in the app (**Widgets → Make a widget**). The [docs](https://shiftpane.vercel.app/docs) cover
+both.
 
 ## Working with Claude Code
 
