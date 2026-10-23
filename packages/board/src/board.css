@@ -56,6 +56,7 @@
 }
 
 .tone-dark,
+.tone-black,
 .board {
   --card: oklch(0.21 0.004 286);
   --card-ink: oklch(0.97 0.002 286);
@@ -68,6 +69,13 @@
   --card-dim: oklch(0.97 0.002 286 / 0.22);
   --card-edge: oklch(1 0 0 / 0.06);
   color-scheme: dark;
+}
+
+/* No card: the widget is white text on the board's own black. The card matches the board, and the
+   hairline round it is gone, so nothing shows of it. */
+.tone-black {
+  --card: oklch(0 0 0);
+  --card-edge: transparent;
 }
 
 /* The page behind the widgets: black, like the phone's own standby screen. */

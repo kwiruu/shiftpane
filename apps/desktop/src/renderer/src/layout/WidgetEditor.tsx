@@ -6,6 +6,7 @@ import { Row, Section, Segmented, Stepper } from './controls.tsx'
 const TONES = [
   { value: 'light', label: 'Light' },
   { value: 'dark', label: 'Dark' },
+  { value: 'black', label: 'No card' },
 ] as const satisfies readonly { value: Tone; label: string }[]
 
 /**

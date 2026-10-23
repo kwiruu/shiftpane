@@ -21,6 +21,7 @@ import {
   setLook,
   setTableGrid,
   updateWidget,
+  WIDGET_KINDS,
   widgetName,
 } from './model.ts'
 
@@ -65,6 +66,25 @@ describe('DEFAULT_BOARD', () => {
       expect(placeTable(table).overflow).toEqual([])
       expect(placeTable(table).free).toEqual([])
     }
+  })
+
+  it('starts the calendar with no card: white text on the board, the opposite of its old white card', () => {
+    const calendar = DEFAULT_BOARD.tables[0]?.widgets.find((item) => item.kind === 'calendar')
+    expect(calendar?.tone).toBe('black')
+    expect(WIDGET_KINDS.calendar.tone).toBe('black')
+    // A saved board with a card colour from before still loads; an unknown one is refused.
+    expect(parseBoard(JSON.parse(JSON.stringify(DEFAULT_BOARD)))).toEqual(DEFAULT_BOARD)
+    expect(
+      Board.safeParse({
+        ...DEFAULT_BOARD,
+        tables: [
+          {
+            ...DEFAULT_BOARD.tables[0],
+            widgets: [{ id: 'x', kind: 'clock', tone: 'purple', columns: 1, rows: 1 }],
+          },
+        ],
+      }).success,
+    ).toBe(false)
   })
 })
 

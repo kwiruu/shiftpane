@@ -55,7 +55,7 @@ export const WIDGET_KINDS: Record<WidgetKind, KindInfo> = {
     name: 'Calendar',
     description: 'Today, this week or the month',
     pcWidget: null,
-    tone: 'light',
+    tone: 'black',
     columns: 1,
   },
   media: {
@@ -149,7 +149,7 @@ export const DEFAULT_BOARD: Board = {
       id: 'table-1',
       columns: 2,
       rows: 1,
-      widgets: [widget('calendar-1', 'calendar', 'light'), widget('cpu-1', 'cpu', 'light')],
+      widgets: [widget('calendar-1', 'calendar', 'black'), widget('cpu-1', 'cpu', 'light')],
     },
     {
       id: 'table-2',

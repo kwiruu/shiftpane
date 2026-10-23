@@ -257,6 +257,7 @@ export function StudioPage({
               options={[
                 { value: 'dark', label: 'Dark' },
                 { value: 'light', label: 'Light' },
+                { value: 'black', label: 'No card' },
               ]}
               value={tone}
               onChange={setTone}
